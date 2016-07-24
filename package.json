@@ -1,0 +1,25 @@
+{
+  "name": "apme",
+  "version": "0.0.1",
+  "description": "Lightweight jsonapi server middleware for express",
+  "main": "dist/apme.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "jsonapi",
+    "api"
+  ],
+  "author": "Roman Ditchuk",
+  "license": "ISC",
+  "dependencies": {
+    "tv4": "^1.2.7"
+  },
+  "devDependencies": {
+    "babel-plugin-transform-object-rest-spread": "^6.8.0",
+    "babel-preset-es2016-node5": "^1.1.2",
+    "gulp": "^3.9.1",
+    "gulp-babel": "^6.1.2",
+    "gulp-sourcemaps": "^1.6.0"
+  }
+}
