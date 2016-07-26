@@ -113,7 +113,7 @@ export class Apme {
     }
 
     expressRouter() {
-        const router = require('express').Router();
+        const router = require.main.require('express').Router();
 
         router.param('collection', (req, res, next, name) => {
             req.collection = this._collections[name];
@@ -298,7 +298,9 @@ export class Apme {
                 }
 
                 // do update
-                const {one, meta = {}} = await req.collection.updateOne(data, context);
+                const {one, meta = {}} = patch
+                    ? await req.collection.updateOne(data, context)
+                    : await req.collection.createOne(data, context);
 
                 const responseData = req.collection.pack(one, context);
 

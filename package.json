@@ -21,5 +21,8 @@
     "gulp": "^3.9.1",
     "gulp-babel": "^6.1.2",
     "gulp-sourcemaps": "^1.6.0"
+  },
+  "peerDependencies": {
+    "express": ">=4"
   }
 }
