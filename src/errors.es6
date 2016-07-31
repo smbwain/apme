@@ -32,8 +32,9 @@ export function methodNotAllowedError(str) {
 
 export function jsonErrorHandler(options = {}) {
     const debug = ('debug' in options) ? !!options.debug : true;
+    const errorLog = options.errorLog || (err => { console.error(err.stack || err) });
     return (err, req, res, next) => {
-        console.error(err.stack || err);
+        errorLog(err);
         res.status(err.httpCode || 500).json({
             errors: [{
                 title: err.message,

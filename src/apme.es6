@@ -6,7 +6,7 @@ import {notFoundError, methodNotAllowedError, validationError, jsonErrorHandler}
 import asyncMW from './asyncMW';
 import tv4 from 'tv4';
 
-export {jsonErrorHandler};
+export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
 
 class ResourcesList {
     constructor(japi, context) {
@@ -139,6 +139,10 @@ export class Apme {
                 req
             };
 
+            if(!req.collection.getList) {
+                throw methodNotAllowedError();
+            }
+
             const {list = [], meta = {}} = await req.collection.getList({
                 page: req.query.page,
                 filter: req.query.filter
@@ -156,15 +160,20 @@ export class Apme {
             };
         }));
         router.get('/:collection/:id', asyncMW(async req => {
-            const {one = null, meta = {}} = await req.collection.getOne(req.params.id);
+            const context = {
+                req
+            };
+
+            if(!req.collection.getOne) {
+                throw methodNotAllowedError();
+            }
+
+            const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
 
             if(!one) {
                 throw notFoundError();
             }
 
-            const context = {
-                req
-            };
             const data = req.collection.pack(one, context);
 
             const rels = new ResourcesList(this, context);
@@ -183,6 +192,10 @@ export class Apme {
                 const context = {
                     req
                 };
+
+                if(patch ? !req.collection.updateOne : !req.collection.createOne) {
+                    throw methodNotAllowedError();
+                }
 
                 // validate basic format
                 const validationResult = tv4.validateResult(req.body, {
@@ -293,7 +306,7 @@ export class Apme {
                 if(req.collection.beforeEditOne) {
                     await req.collection.beforeEditOne({
                         action: patch ? 'update' : 'create',
-                        data: data
+                        data
                     }, context);
                 }
 
@@ -318,6 +331,35 @@ export class Apme {
 
         router.post('/:collection', updaterMiddleware(false));
         router.patch('/:collection/:id', updaterMiddleware(true));
+        router.delete('/:collection/:id', asyncMW(async (req, res) => {
+            const id = String(req.params.id);
+            const context = {
+                req
+            };
+
+            if(!req.collection.deleteOne) {
+                throw methodNotAllowedError();
+            }
+
+            if(req.collection.beforeEditOne) {
+                await req.collection.beforeEditOne({
+                    data: {id},
+                    action: 'delete'
+                }, context);
+            }
+
+            // do delete
+            const {meta = {}} = await req.collection.deleteOne(id, context) || {};
+
+            if(!Object.keys(meta).length) {
+                res.status(204).send();
+                return null;
+            }
+
+            return {
+                meta: meta
+            };
+        }));
 
         return router;
     }
