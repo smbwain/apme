@@ -3,7 +3,7 @@
  */
 
 import {notFoundError, methodNotAllowedError, validationError, jsonErrorHandler} from './errors';
-import asyncMW from './asyncMW';
+import asyncMW from 'async-mw';
 import tv4 from 'tv4';
 
 export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
@@ -59,17 +59,15 @@ class ResourcesList {
     }
 }
 
-export class Apme {
+export class Api {
     constructor() {
         this._collections = {};
     }
 
     define(type, options) {
-        if(!options.packAttrs) {
-            throw new Error('You should provide packAttrs method');
-        }
         this._collections[type] = {
             links: {},
+            packAttrs: ({id, ...rest}) => rest,
             ...options,
             pack: function(item, context) {
                 const res = {

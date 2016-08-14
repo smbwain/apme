@@ -4,7 +4,7 @@
   "description": "Lightweight jsonapi server middleware for express",
   "main": "dist/apme.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "gulp build && mocha dist tests"
   },
   "keywords": [
     "jsonapi",
@@ -13,14 +13,21 @@
   "author": "Roman Ditchuk",
   "license": "ISC",
   "dependencies": {
+    "async-mw": "0.0.2",
     "tv4": "^1.2.7"
+  },
+  "engines": {
+    "node" : ">=5"
   },
   "devDependencies": {
     "babel-plugin-transform-object-rest-spread": "^6.8.0",
     "babel-preset-es2016-node5": "^1.1.2",
+    "express": "^4.14.0",
     "gulp": "^3.9.1",
     "gulp-babel": "^6.1.2",
-    "gulp-sourcemaps": "^1.6.0"
+    "gulp-sourcemaps": "^1.6.0",
+    "mocha": "^3.0.2",
+    "request": "^2.74.0"
   },
   "peerDependencies": {
     "express": ">=4"
