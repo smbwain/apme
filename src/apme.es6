@@ -14,17 +14,17 @@ class ResourcesList {
         this._resourcesToLoad = {};
         this._context = context;
     }
-    addLink(link) {
-        (this._resourcesToLoad[link.type] || (this._resourcesToLoad[link.type] = new Set())).add(link.id);
+    addRel(rel) {
+        (this._resourcesToLoad[rel.type] || (this._resourcesToLoad[rel.type] = new Set())).add(rel.id);
     }
     addItemRelationships(item) {
         const relationships = item.relationships || {};
         for(const relationshipName in relationships) {
-            if(!this._japi._collections[item.type].links[relationshipName]) {
+            if(!this._japi._collections[item.type].rels[relationshipName]) {
                 console.warn(`No relationship "${relationshipName}" for collection "${item.type}"`);
                 continue;
             }
-            if(!this._japi._collections[item.type].links[relationshipName].include) {
+            if(!this._japi._collections[item.type].rels[relationshipName].include) {
                 continue;
             }
             const relationshipData = relationships[relationshipName].data;
@@ -32,7 +32,7 @@ class ResourcesList {
                 continue;
             }
             for(const rel of Array.isArray(relationshipData) ? relationshipData : [relationshipData]) {
-                this.addLink(rel);
+                this.addRel(rel);
             }
         }
     }
@@ -66,7 +66,7 @@ export class Api {
 
     define(type, options) {
         this._collections[type] = {
-            links: {},
+            rels: {},
             packAttrs: ({id, ...rest}) => rest,
             ...options,
             pack: function(item, context) {
@@ -75,8 +75,8 @@ export class Api {
                     type,
                     attributes: this.packAttrs(item, context)
                 };
-                for(const relName in this.links) {
-                    const rel = this.links[relName];
+                for(const relName in this.rels) {
+                    const rel = this.rels[relName];
                     if(rel.getList) {
                         res.relationships = res.relationships || {};
                         res.relationships[relName] = {
@@ -198,7 +198,7 @@ export class Api {
                 // validate basic format
                 const validationResult = tv4.validateResult(req.body, {
                     definitions: {
-                        link: {
+                        rel: {
                             type: 'object',
                             additionalProperties: false,
                             required: ['id', 'type'],
@@ -220,10 +220,10 @@ export class Api {
                                     oneOf: [{
                                         type: 'array',
                                         items: {
-                                            $ref: '#/definitions/link'
+                                            $ref: '#/definitions/rel'
                                         }
                                     }, {
-                                        $ref: '#/definitions/link'
+                                        $ref: '#/definitions/rel'
                                     }]
                                 }
                             }
@@ -265,36 +265,36 @@ export class Api {
                 }
                 const passedRels = req.body.data.relationships || {};
                 for(const relName in passedRels) {
-                    const linkDefinition = req.collection.links[relName];
-                    if(!linkDefinition) {
+                    const relDefinition = req.collection.rels[relName];
+                    if(!relDefinition) {
                         throw new Error("Unknown relationship name");
                     }
-                    if(linkDefinition.fromList) {
+                    if(relDefinition.fromList) {
                         if(!Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toMany"`);
                         }
-                        data = {...data, ...linkDefinition.fromList(passedRels[relName].data)};
-                    } else if(linkDefinition.type && linkDefinition.fromIds) {
+                        data = {...data, ...relDefinition.fromList(passedRels[relName].data)};
+                    } else if(relDefinition.type && relDefinition.fromIds) {
                         if(!Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toMany"`);
                         }
-                        if(passedRels[relName].data.some(rel => rel.type != linkDefinition.type)) {
+                        if(passedRels[relName].data.some(rel => rel.type != relDefinition.type)) {
                             throw new Error(`Inappropriate type in relationship`);
                         }
-                        data = {...data, ...linkDefinition.fromIds(passedRels[relName].data.map(rel => rel.id))};
+                        data = {...data, ...relDefinition.fromIds(passedRels[relName].data.map(rel => rel.id))};
                     } else if(rel.fromOne) {
                         if(Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toOne"`);
                         }
-                        data = {...data, ...linkDefinition.fromOne(passedRels[relName].data)};
+                        data = {...data, ...relDefinition.fromOne(passedRels[relName].data)};
                     } else if(rel.type && rel.fromId) {
                         if(Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toOne"`);
                         }
-                        if(passedRels[relName].data.type != linkDefinition.type) {
+                        if(passedRels[relName].data.type != relDefinition.type) {
                             throw new Error(`Inappropriate type in relationship`);
                         }
-                        data = {...data, ...linkDefinition.fromId(passedRels[relName].data.id)};
+                        data = {...data, ...relDefinition.fromId(passedRels[relName].data.id)};
                     }
                 }
                 if(patch) {

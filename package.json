@@ -1,10 +1,14 @@
 {
   "name": "apme",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Lightweight jsonapi server middleware for express",
   "main": "dist/apme.js",
   "scripts": {
     "test": "gulp build && mocha dist/tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smbwain/apme.git"
   },
   "keywords": [
     "jsonapi",
