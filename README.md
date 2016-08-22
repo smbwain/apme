@@ -111,7 +111,6 @@ API
         Returned object __must__ contain property _one_ with modified item containing all fields (not only patched ones).
         Returned object __may__ contain property _meta_.
 
-
     * {function} __createOne__
     
         Async function which creates new element.

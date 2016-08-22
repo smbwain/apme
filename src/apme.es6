@@ -68,6 +68,7 @@ export class Api {
         this._collections[type] = {
             rels: {},
             packAttrs: ({id, ...rest}) => rest,
+            unpackAttrs: attrs => ({...attrs}),
             ...options,
             pack: function(item, context) {
                 const res = {
