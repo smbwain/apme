@@ -130,4 +130,8 @@ API
         async function(id, context)
         ```
         
+    * {boolean} __passId__
+    
+       Allow user to pass own id on new item creation.
+        
     * {object} __rels__

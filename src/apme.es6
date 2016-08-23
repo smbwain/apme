@@ -5,6 +5,7 @@
 import {notFoundError, methodNotAllowedError, validationError, jsonErrorHandler} from './errors';
 import asyncMW from 'async-mw';
 import tv4 from 'tv4';
+import {v4 as uuid} from 'uuid';
 
 export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
 
@@ -17,9 +18,26 @@ class ResourcesList {
     addRel(rel) {
         (this._resourcesToLoad[rel.type] || (this._resourcesToLoad[rel.type] = new Set())).add(rel.id);
     }
-    addItemRelationships(item) {
-        const relationships = item.relationships || {};
-        for(const relationshipName in relationships) {
+
+    addItemRelationship(item, relationshipName) {
+        if(!item.relationships || !item.relationships[relationshipName]) {
+            return;
+        }
+        const relationshipData = item.relationships[relationshipName].data;
+        if(!relationshipData) {
+            return;
+        }
+        for(const rel of Array.isArray(relationshipData) ? relationshipData : [relationshipData]) {
+            this.addRel(rel);
+        }
+    }
+
+    /**
+     * @param {object} item
+     * @param {array<string>} [rels]
+     */
+    addItemRelationships(item, rels) {
+        for(const relationshipName in item.relationships || {}) {
             if(!this._japi._collections[item.type].rels[relationshipName]) {
                 console.warn(`No relationship "${relationshipName}" for collection "${item.type}"`);
                 continue;
@@ -27,13 +45,7 @@ class ResourcesList {
             if(!this._japi._collections[item.type].rels[relationshipName].include) {
                 continue;
             }
-            const relationshipData = relationships[relationshipName].data;
-            if(!relationshipData) {
-                continue;
-            }
-            for(const rel of Array.isArray(relationshipData) ? relationshipData : [relationshipData]) {
-                this.addRel(rel);
-            }
+            this.addItemRelationship(item, relationshipName);
         }
     }
     addItemsListRelationships(list) {
@@ -44,6 +56,17 @@ class ResourcesList {
     async load() {
         const res = [];
         for(const collectionName in this._resourcesToLoad) {
+            if(this._japi._collections[collectionName].getFew) {
+                for(const data of (await this._japi._collections[collectionName].getFew(Array.from(this._resourcesToLoad[collectionName]))).list) {
+                    if(data) {
+                        res.push(
+                            this._japi._collections[collectionName].pack(data, this._context)
+                        );
+                    }
+                }
+                continue;
+            }
+            console.warn(`Loading many records from "${collectionName}" by getOne. Add getFew(ids) to improve performance.`);
             if(this._japi._collections[collectionName].getOne) {
                 for(const id of this._resourcesToLoad[collectionName]) {
                     const data = (await this._japi._collections[collectionName].getOne(id)).one;
@@ -53,7 +76,9 @@ class ResourcesList {
                         );
                     }
                 }
+                continue;
             }
+            throw new Error(`Can't include relationships form collection "${collectionName}"`);
         }
         return res;
     }
@@ -69,6 +94,7 @@ export class Api {
             rels: {},
             packAttrs: ({id, ...rest}) => rest,
             unpackAttrs: attrs => ({...attrs}),
+            generateId: options.passId ? (data, passedId) => passedId || uuid() : () => uuid(),
             ...options,
             pack: function(item, context) {
                 const res = {
@@ -300,6 +326,8 @@ export class Api {
                 }
                 if(patch) {
                     data.id = req.params.id;
+                } else {
+                    data.id = req.collection.generateId(data, req.body.data.id);
                 }
 
                 if(req.collection.beforeEditOne) {
@@ -357,6 +385,38 @@ export class Api {
 
             return {
                 meta: meta
+            };
+        }));
+
+        router.get('/:collection/:id/:relName', asyncMW(async req => {
+            const context = {
+                req
+            };
+
+            const rel = req.collection.rels[req.params.relName];
+            if(!rel) {
+                throw notFoundError('No relation with such name');
+            }
+
+            if(!req.collection.getOne) {
+                throw methodNotAllowedError();
+            }
+
+            const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
+
+            if(!one) {
+                throw notFoundError();
+            }
+
+            const data = req.collection.pack(one, context);
+
+            const rels = new ResourcesList(this, context);
+            rels.addItemRelationship(data, req.params.relName);
+            const relationships = await rels.load();
+
+            return {
+                data: (rel.getId || rel.getOne) ? relationships[0] || null : relationships,
+                meta: Object.keys(meta).length ? meta : undefined
             };
         }));
 
