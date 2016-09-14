@@ -86,10 +86,9 @@ async function loadAllRelationships(api, context, loadedObjects) {
     for(const object of loadedObjects) {
         presCache.push(object);
     }
-    function push(collectionName, data) {
-        const pres = api._collections[collectionName].pack(data, context);
-        includedResult.push(pres);
-        presCache.push(pres);
+    function push(object) {
+        includedResult.push(object);
+        presCache.push(object);
     }
 
     let includeSets = [
@@ -143,7 +142,7 @@ async function loadAllRelationships(api, context, loadedObjects) {
                 for(const id of idsSet) {
                     const cached = context._cache[type] && context._cache[type][id];
                     if(cached) {
-                        push(type, cached);
+                        push(api._collections[type].pack(cached, context));
                     } else {
                         rest.push(id);
                     }
@@ -153,29 +152,7 @@ async function loadAllRelationships(api, context, loadedObjects) {
                     return;
                 }
 
-                // try to load with getFew collection method
-                if(api._collections[type].getFew) {
-                    for (const data of (await api._collections[type].getFew(rest)).list) {
-                        push(type, data);
-                    }
-                    return;
-                }
-
-                // try to load with getOne method
-                if(api._collections[type].getOne) {
-                    if(rest.length > 1) {
-                        console.warn(`Loading many records from "${type}" by getOne. Add getFew(ids) to improve performance.`);
-                    }
-                    for(const id of rest) {
-                        const data = (await api._collections[type].getOne(id)).one;
-                        if(data) {
-                            push(type, data);
-                        }
-                    }
-                    return;
-                }
-
-                throw new Error(`Can't include relationships form collection "${type}"`);
+                await api._collections[type].loadByIdsAndPack(rest, push);
             })());
         });
         await Promise.all(promises);
@@ -273,6 +250,57 @@ export class Api {
                     }
                 }
                 return res;
+            },
+            loadByIdsAndPack: async function(ids, handler) {
+                if(!ids.length) {
+                    return;
+                }
+
+                // try to load from collection cache
+                if(this.cache && this.cache.getS) {
+                    ids = ids.filter(id => {
+                        const cached = this.cache.getS(type, id);
+                        if(cached) {
+                            handler(cached);
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+
+                const toCache = [];
+                const push = (data) => {
+                    const presentation = this.pack(data);
+                    if(this.cache) {
+                        toCache.push(presentation);
+                    }
+                    handler(presentation);
+                };
+
+                // try to load with getFew collection method
+                if(this.getFew) {
+                    (await this.getFew(ids)).list.forEach(push);
+                } else if(this.getOne) {
+                    if(ids.length > 1) {
+                        console.warn(`Loading many records from "${type}" by getOne. Add getFew(ids) to improve performance.`);
+                    }
+                    for(const id of ids) {
+                        const data = (await this.getOne(id)).one;
+                        if(data) {
+                            push(data);
+                        }
+                    }
+                } else {
+                    throw new Error(`Can't load objects form collection "${type}"`);
+                }
+
+                if(this.cache) {
+                    if(this.cache.setS) {
+                        for(const element of toCache) {
+                            this.cache.setS(element);
+                        }
+                    }
+                }
             }
         };
     }
@@ -584,5 +612,20 @@ export class Api {
         }));
 
         return router;
+    }
+}
+
+export class SimpleCache {
+    constructor({clearInterval}) {
+        this._cache = {};
+        this._tmr = setInterval(() => {
+            this._cache = {};
+        }, clearInterval);
+    }
+    setS(key, value) {
+        this._cache[key] = value;
+    }
+    getS(key) {
+        return this._cache[key];
     }
 }
