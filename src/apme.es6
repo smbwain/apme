@@ -2,86 +2,226 @@
  * Lightweight JSON Api server implementation
  */
 
-import {notFoundError, methodNotAllowedError, validationError, jsonErrorHandler} from './errors';
+import {notFoundError, methodNotAllowedError, badRequestError, validationError, jsonErrorHandler} from './errors';
 import asyncMW from 'async-mw';
 import tv4 from 'tv4';
 import {v4 as uuid} from 'uuid';
 
 export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
 
-class ResourcesList {
-    constructor(japi, context) {
-        this._japi = japi;
-        this._resourcesToLoad = {};
-        this._context = context;
-    }
-    addRel(rel) {
-        (this._resourcesToLoad[rel.type] || (this._resourcesToLoad[rel.type] = new Set())).add(rel.id);
-    }
+function createContext(properties) {
+    return {
+        ...properties,
+        _cache: {},
+        cache(type, instance) {
+            (this._cache[type] || (this._cache[type] = {}))[instance.id] = instance;
+        }
+    };
+}
 
-    addItemRelationship(item, relationshipName) {
-        if(!item.relationships || !item.relationships[relationshipName]) {
-            return;
-        }
-        const relationshipData = item.relationships[relationshipName].data;
-        if(!relationshipData) {
-            return;
-        }
-        for(const rel of Array.isArray(relationshipData) ? relationshipData : [relationshipData]) {
-            this.addRel(rel);
-        }
+class Ids {
+    constructor() {
+        this._cache = {};
     }
-
-    /**
-     * @param {object} item
-     * @param {array<string>} [rels]
-     */
-    addItemRelationships(item, rels) {
-        for(const relationshipName in item.relationships || {}) {
-            if(!this._japi._collections[item.type].rels[relationshipName]) {
-                console.warn(`No relationship "${relationshipName}" for collection "${item.type}"`);
-                continue;
-            }
-            if(!this._japi._collections[item.type].rels[relationshipName].include) {
-                continue;
-            }
-            this.addItemRelationship(item, relationshipName);
-        }
-    }
-    addItemsListRelationships(list) {
+    static fromObjectsList(list) {
+        const ids = new Ids();
         for(const item of list) {
-            this.addItemRelationships(item);
+            ids.push(item.type, item.id);
+        }
+        return ids;
+    }
+    push(type, id) {
+        (this._cache[type] || (this._cache[type] = new Set())).add(id);
+    }
+    loop(handler) {
+        for(const type in this._cache) {
+            for(const id of this._cache[type]) {
+                handler(type, id);
+            }
         }
     }
-    async load() {
-        const res = [];
-        for(const collectionName in this._resourcesToLoad) {
-            if(this._japi._collections[collectionName].getFew) {
-                for(const data of (await this._japi._collections[collectionName].getFew(Array.from(this._resourcesToLoad[collectionName]))).list) {
-                    if(data) {
-                        res.push(
-                            this._japi._collections[collectionName].pack(data, this._context)
-                        );
-                    }
-                }
-                continue;
-            }
-            console.warn(`Loading many records from "${collectionName}" by getOne. Add getFew(ids) to improve performance.`);
-            if(this._japi._collections[collectionName].getOne) {
-                for(const id of this._resourcesToLoad[collectionName]) {
-                    const data = (await this._japi._collections[collectionName].getOne(id)).one;
-                    if(data) {
-                        res.push(
-                            this._japi._collections[collectionName].pack(data, this._context)
-                        );
-                    }
-                }
-                continue;
-            }
-            throw new Error(`Can't include relationships form collection "${collectionName}"`);
+    loopTypes(handler) {
+        for(const type in this._cache) {
+            handler(type, this._cache[type]);
         }
-        return res;
     }
+    /*toJSON() {
+        const obj = {};
+        this.loopTypes((type, idsSet) => {
+            obj[type] = Array.from(idsSet);
+        });
+        return obj;
+    }*/
+}
+
+class PresentationCache {
+    constructor() {
+        this._cache = {};
+    }
+    push(obj) {
+        (this._cache[obj.type] || (this._cache[obj.type] = {}))[obj.id] = obj;
+    }
+    get(type, id) {
+        return this._cache[type] && this._cache[type][id];
+    }
+    getAll(ids) {
+        const objects = [];
+        ids.loop((type, id) => {
+            const object = this.get(type, id);
+            if(object) {
+                objects.push(object);
+            }
+        });
+        return objects;
+    }
+}
+
+async function loadAllRelationships(api, context, loadedObjects) {
+    if(!context.include) {
+        return;
+    }
+
+    const includedResult = [];
+    const presCache = new PresentationCache();
+    for(const object of loadedObjects) {
+        presCache.push(object);
+    }
+    function push(collectionName, data) {
+        const pres = api._collections[collectionName].pack(data, context);
+        includedResult.push(pres);
+        presCache.push(pres);
+    }
+
+    let includeSets = [
+        {
+            includeTree: context.include,
+            ids: Ids.fromObjectsList(loadedObjects)
+        }
+    ];
+
+    while(includeSets.length) {
+        // process many includeSets on each step
+
+        const newIncludeSets = [];
+        const needToLoad = new Ids();
+        for(const includeSet of includeSets) {
+            const objects = presCache.getAll(includeSet.ids);
+            for(const relName in includeSet.includeTree) {
+                let ids;
+                if(Object.keys(includeSet.includeTree[relName]).length) {
+                    ids = new Ids();
+                    newIncludeSets.push({
+                        includeTree: includeSet.includeTree[relName],
+                        ids
+                    });
+                }
+                for(const object of objects) {
+                    const objectRelationshipData = object.relationships && object.relationships[relName] && object.relationships[relName].data;
+                    if(!objectRelationshipData) {
+                        continue;
+                    }
+                    for(const rel of Array.isArray(objectRelationshipData) ? objectRelationshipData : [objectRelationshipData]) {
+                        if(ids) {
+                            ids.push(rel.type, rel.id);
+                        }
+                        if(!presCache.get(rel.type, rel.id)) {
+                            needToLoad.push(rel.type, rel.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        includeSets = newIncludeSets;
+
+        const promises = [];
+        needToLoad.loopTypes((type, idsSet) => {
+            promises.push((async() => {
+
+                // try to load from context cache
+                const rest = [];
+                for(const id of idsSet) {
+                    const cached = context._cache[type] && context._cache[type][id];
+                    if(cached) {
+                        push(type, cached);
+                    } else {
+                        rest.push(id);
+                    }
+                }
+
+                if(!rest.length) {
+                    return;
+                }
+
+                // try to load with getFew collection method
+                if(api._collections[type].getFew) {
+                    for (const data of (await api._collections[type].getFew(rest)).list) {
+                        push(type, data);
+                    }
+                    return;
+                }
+
+                // try to load with getOne method
+                if(api._collections[type].getOne) {
+                    if(rest.length > 1) {
+                        console.warn(`Loading many records from "${type}" by getOne. Add getFew(ids) to improve performance.`);
+                    }
+                    for(const id of rest) {
+                        const data = (await api._collections[type].getOne(id)).one;
+                        if(data) {
+                            push(type, data);
+                        }
+                    }
+                    return;
+                }
+
+                throw new Error(`Can't include relationships form collection "${type}"`);
+            })());
+        });
+        await Promise.all(promises);
+    }
+
+    return includedResult.length ? includedResult : undefined;
+}
+
+/**
+ * @param {string} sortString
+ * @returns {Array<{string, boolean}>}
+ */
+function parseSort(sortString) {
+    return sortString.split(',').map(sortElement => {
+        if(sortElement[0] == '-') {
+            return [sortElement.slice(1), false];
+        }
+        return [sortElement, true];
+    });
+}
+
+/**
+ * @param {Object<string, string>} fieldsObject
+ * @returns {Object<Array<string>>}
+ */
+function parseFields(fieldsObject) {
+    const res = {};
+    for(const collectionName in fieldsObject) {
+        res[collectionName] = new Set(fieldsObject[collectionName].split(','));
+    }
+    return res;
+}
+
+function parseInclude(includeString) {
+    // @todo: validate it
+    const obj = {};
+    function bld(curObj, path, i) {
+        curObj[path[i]] || (curObj[path[i]] = {});
+    }
+    for(const includeElement of includeString.split(',')) {
+        let curObj = obj;
+        for(const current of includeElement.split('.')) {
+            curObj = curObj[current] || (curObj[current] = {});
+        }
+    }
+    return obj;
 }
 
 export class Api {
@@ -160,37 +300,58 @@ export class Api {
         });
 
         router.get('/:collection', asyncMW(async req => {
-            const context = {
+            const context = createContext({
                 req
-            };
+            });
 
             if(!req.collection.getList) {
                 throw methodNotAllowedError();
             }
 
-            const {list = [], meta = {}} = await req.collection.getList({
+            const query = {
                 page: req.query.page,
                 filter: req.query.filter
-            });
-            const data = list.map(item => req.collection.pack(item, context));
+            };
+            if(req.query.sort) {
+                query.sort = parseSort(req.query.sort);
+                let ok = false;
+                if(typeof req.collection.allowSort == 'function') {
+                    ok = req.collection.allowSort(query.sort);
+                }
+                // @todo: validate other patterns
+                if(!ok) {
+                    throw badRequestError('Sort is not allowed for collection');
+                }
+            }
+            if(req.query.fields) {
+                // @todo: validate
+                query.fields = parseFields(req.query.fields);
+            }
 
-            const rels = new ResourcesList(this, context);
-            rels.addItemsListRelationships(data);
-            const included = await rels.load();
+            if(req.query.include) {
+                context.include = parseInclude(req.query.include);
+            }
+
+            const {list = [], meta = {}} = await req.collection.getList(query, context);
+            const data = list.map(item => req.collection.pack(item, context));
 
             return {
                 data,
-                included: included.length ? included : undefined,
+                included: await loadAllRelationships(this, context, data),
                 meta: Object.keys(meta).length ? meta : undefined
             };
         }));
         router.get('/:collection/:id', asyncMW(async req => {
-            const context = {
+            const context = createContext({
                 req
-            };
+            });
 
             if(!req.collection.getOne) {
                 throw methodNotAllowedError();
+            }
+
+            if(req.query.include) {
+                context.include = parseInclude(req.query.include);
             }
 
             const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
@@ -201,22 +362,18 @@ export class Api {
 
             const data = req.collection.pack(one, context);
 
-            const rels = new ResourcesList(this, context);
-            rels.addItemRelationships(data);
-            const included = await rels.load();
-
             return {
                 data,
-                included: included.length ? included : undefined,
+                included: await loadAllRelationships(this, context, [data]),
                 meta: Object.keys(meta).length ? meta : undefined
             };
         }));
 
         const updaterMiddleware = (patch) => {
             return asyncMW(async req => {
-                const context = {
+                const context = createContext({
                     req
-                };
+                });
 
                 if(patch ? !req.collection.updateOne : !req.collection.createOne) {
                     throw methodNotAllowedError();
@@ -286,6 +443,10 @@ export class Api {
                     throw validationError(validationResult.error);
                 }
 
+                if(req.query.include) {
+                    context.include = parseInclude(req.query.include);
+                }
+
                 let data = {};
                 if(req.body.data.attributes) {
                     data = {...req.collection.unpackAttrs(req.body.data.attributes, context)};
@@ -344,13 +505,9 @@ export class Api {
 
                 const responseData = req.collection.pack(one, context);
 
-                const rels = new ResourcesList(this, context);
-                rels.addItemRelationships(responseData);
-                const included = await rels.load();
-
                 return {
                     data: responseData,
-                    included: included.length ? included : undefined,
+                    included: await loadAllRelationships(this, context, [responseData]),
                     meta: Object.keys(meta).length ? meta : undefined
                 };
             });
@@ -360,9 +517,9 @@ export class Api {
         router.patch('/:collection/:id', updaterMiddleware(true));
         router.delete('/:collection/:id', asyncMW(async (req, res) => {
             const id = String(req.params.id);
-            const context = {
+            const context = createContext({
                 req
-            };
+            });
 
             if(!req.collection.deleteOne) {
                 throw methodNotAllowedError();
@@ -389,9 +546,9 @@ export class Api {
         }));
 
         router.get('/:collection/:id/:relName', asyncMW(async req => {
-            const context = {
+            const context = createContext({
                 req
-            };
+            });
 
             const rel = req.collection.rels[req.params.relName];
             if(!rel) {
@@ -402,6 +559,10 @@ export class Api {
                 throw methodNotAllowedError();
             }
 
+            if(req.query.include) {
+                context.include = parseInclude(req.query.include);
+            }
+
             const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
 
             if(!one) {
@@ -409,6 +570,8 @@ export class Api {
             }
 
             const data = req.collection.pack(one, context);
+
+            // @todo
 
             const rels = new ResourcesList(this, context);
             rels.addItemRelationship(data, req.params.relName);

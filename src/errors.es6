@@ -24,6 +24,12 @@ export function notFoundError(str) {
     return err;
 }
 
+export function badRequestError(str) {
+    const err = new Error(str || 'Bad Request');
+    err.httpCode = 400;
+    return err;
+}
+
 export function methodNotAllowedError(str) {
     const err = new Error(str || 'Method Not Allowed');
     err.httpCode = 405;

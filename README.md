@@ -183,5 +183,16 @@ API
     * {boolean} __passId__
     
        Allow user to pass own id on new item creation.
+       
+    * {mixed} __allowSort__
+    
+       false - sort not allowed (default)
+       <string> | <array<string>> - sorting patterns (@todo: implement)
+       <function(sortObject)>
+       <true> - allow sorting by any allowed fields (_allowFields_ should be defined) (@todo: implement)
+       
+    * {array<string>} __allowFields__
+      
+       list of fields
         
     * {object} __rels__
