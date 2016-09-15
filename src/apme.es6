@@ -9,12 +9,24 @@ import {v4 as uuid} from 'uuid';
 
 export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
 
-function createContext(properties) {
+function createContext(apme, properties) {
     return {
         ...properties,
         _cache: {},
         cache(type, instance) {
             (this._cache[type] || (this._cache[type] = {}))[instance.id] = instance;
+        },
+        async loadOne(type, id) {
+            const cached = this._cache[type] && this._cache[type][id];
+            if(cached) {
+                return this._cache;
+            }
+
+            const one = await apme._collections[type].loadOne(id);
+            if(one) {
+                this.cache(type, one);
+            }
+            return one;
         }
     };
 }
@@ -152,7 +164,7 @@ async function loadAllRelationships(api, context, loadedObjects) {
                     return;
                 }
 
-                await api._collections[type].loadByIdsAndPack(rest, push);
+                await api._collections[type].loadByIdsAndPack(rest, context, push);
             })());
         });
         await Promise.all(promises);
@@ -213,6 +225,7 @@ export class Api {
             unpackAttrs: attrs => ({...attrs}),
             generateId: options.passId ? (data, passedId) => passedId || uuid() : () => uuid(),
             ...options,
+            include: typeof options.include == 'string' ? parseInclude(options.include) : options.include,
             pack: function(item, context) {
                 const res = {
                     id: String(item.id),
@@ -251,7 +264,24 @@ export class Api {
                 }
                 return res;
             },
-            loadByIdsAndPack: async function(ids, handler) {
+            loadOne: async function(id, context) {
+                if(this.getOne) {
+                    return (await this.getOne(id, context)).one;
+                }
+                if(this.getFew) {
+                    return (await this.getFew([id], context)).list[0];
+                }
+                throw new Error('No method to loadOne');
+            },
+            loadByIdsAndPack: async function(ids, context, handler) {
+                let res;
+                if(!handler) {
+                    res = [];
+                    handler = obj => {
+                        res.push(obj)
+                    };
+                }
+
                 if(!ids.length) {
                     return;
                 }
@@ -259,13 +289,17 @@ export class Api {
                 // try to load from collection cache
                 if(this.cache && this.cache.getS) {
                     ids = ids.filter(id => {
-                        const cached = this.cache.getS(type, id);
+                        const cached = this.cache.getS(`${type}:${id}`);
                         if(cached) {
                             handler(cached);
                             return false;
                         }
                         return true;
                     });
+                }
+
+                if(!ids.length) {
+                    return res;
                 }
 
                 const toCache = [];
@@ -277,15 +311,15 @@ export class Api {
                     handler(presentation);
                 };
 
-                // try to load with getFew collection method
+                // try to load with getFew/getOne collection method
                 if(this.getFew) {
-                    (await this.getFew(ids)).list.forEach(push);
+                    (await this.getFew(ids, context)).list.forEach(push);
                 } else if(this.getOne) {
                     if(ids.length > 1) {
                         console.warn(`Loading many records from "${type}" by getOne. Add getFew(ids) to improve performance.`);
                     }
                     for(const id of ids) {
-                        const data = (await this.getOne(id)).one;
+                        const data = (await this.getOne(id, context)).one;
                         if(data) {
                             push(data);
                         }
@@ -297,10 +331,12 @@ export class Api {
                 if(this.cache) {
                     if(this.cache.setS) {
                         for(const element of toCache) {
-                            this.cache.setS(element);
+                            this.cache.setS(`${element.type}:${element.id}`, element);
                         }
                     }
                 }
+
+                return res;
             }
         };
     }
@@ -328,7 +364,7 @@ export class Api {
         });
 
         router.get('/:collection', asyncMW(async req => {
-            const context = createContext({
+            const context = createContext(this, {
                 req
             });
 
@@ -356,9 +392,7 @@ export class Api {
                 query.fields = parseFields(req.query.fields);
             }
 
-            if(req.query.include) {
-                context.include = parseInclude(req.query.include);
-            }
+            context.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
 
             const {list = [], meta = {}} = await req.collection.getList(query, context);
             const data = list.map(item => req.collection.pack(item, context));
@@ -370,7 +404,7 @@ export class Api {
             };
         }));
         router.get('/:collection/:id', asyncMW(async req => {
-            const context = createContext({
+            const context = createContext(this, {
                 req
             });
 
@@ -378,28 +412,23 @@ export class Api {
                 throw methodNotAllowedError();
             }
 
-            if(req.query.include) {
-                context.include = parseInclude(req.query.include);
-            }
+            context.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
 
-            const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
+            const data = (await req.collection.loadByIdsAndPack([req.params.id], context))[0];
 
-            if(!one) {
+            if(!data) {
                 throw notFoundError();
             }
 
-            const data = req.collection.pack(one, context);
-
             return {
                 data,
-                included: await loadAllRelationships(this, context, [data]),
-                meta: Object.keys(meta).length ? meta : undefined
+                included: await loadAllRelationships(this, context, [data])
             };
         }));
 
         const updaterMiddleware = (patch) => {
             return asyncMW(async req => {
-                const context = createContext({
+                const context = createContext(this, {
                     req
                 });
 
@@ -471,9 +500,7 @@ export class Api {
                     throw validationError(validationResult.error);
                 }
 
-                if(req.query.include) {
-                    context.include = parseInclude(req.query.include);
-                }
+                context.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
 
                 let data = {};
                 if(req.body.data.attributes) {
@@ -498,12 +525,12 @@ export class Api {
                             throw new Error(`Inappropriate type in relationship`);
                         }
                         data = {...data, ...relDefinition.fromIds(passedRels[relName].data.map(rel => rel.id))};
-                    } else if(rel.fromOne) {
+                    } else if(relDefinition.fromOne) {
                         if(Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toOne"`);
                         }
                         data = {...data, ...relDefinition.fromOne(passedRels[relName].data)};
-                    } else if(rel.type && rel.fromId) {
+                    } else if(relDefinition.type && relDefinition.fromId) {
                         if(Array.isArray(passedRels[relName].data)) {
                             throw new Error(`Relationship "${relName}" should be "toOne"`);
                         }
@@ -545,7 +572,7 @@ export class Api {
         router.patch('/:collection/:id', updaterMiddleware(true));
         router.delete('/:collection/:id', asyncMW(async (req, res) => {
             const id = String(req.params.id);
-            const context = createContext({
+            const context = createContext(this, {
                 req
             });
 
@@ -574,7 +601,7 @@ export class Api {
         }));
 
         router.get('/:collection/:id/:relName', asyncMW(async req => {
-            const context = createContext({
+            const context = createContext(this, {
                 req
             });
 
@@ -583,31 +610,25 @@ export class Api {
                 throw notFoundError('No relation with such name');
             }
 
-            if(!req.collection.getOne) {
-                throw methodNotAllowedError();
-            }
-
             if(req.query.include) {
                 context.include = parseInclude(req.query.include);
             }
 
-            const {one = null, meta = {}} = await req.collection.getOne(req.params.id, context);
-
-            if(!one) {
+            const mainData = (await req.collection.loadByIdsAndPack([req.params.id], context))[0];
+            if(!mainData) {
                 throw notFoundError();
             }
 
-            const data = req.collection.pack(one, context);
-
-            // @todo
-
-            const rels = new ResourcesList(this, context);
-            rels.addItemRelationship(data, req.params.relName);
-            const relationships = await rels.load();
+            const data = await loadAllRelationships(this, {
+                ...context,
+                include: {
+                    [req.params.relName]: {}
+                }
+            }, [mainData]);
 
             return {
-                data: (rel.getId || rel.getOne) ? relationships[0] || null : relationships,
-                meta: Object.keys(meta).length ? meta : undefined
+                data: (rel.getId || rel.getOne) ? data[0] || null : data,
+                included: await loadAllRelationships(this, context, data)
             };
         }));
 
@@ -616,7 +637,7 @@ export class Api {
 }
 
 export class SimpleCache {
-    constructor({clearInterval}) {
+    constructor({clearInterval = 5*60*1000} = {}) {
         this._cache = {};
         this._tmr = setInterval(() => {
             this._cache = {};
