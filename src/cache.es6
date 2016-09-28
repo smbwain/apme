@@ -47,8 +47,9 @@ export class Cache {
     }
 }
 
-export class SimpleMemoryCache {
+export class SimpleMemoryCache extends Cache {
     constructor({flushInterval} = {}) {
+        super();
         this._cache = {};
         if(flushInterval) {
             this._tmr = setInterval(() => {

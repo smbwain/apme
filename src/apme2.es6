@@ -1,99 +1,23 @@
+/**
+ * @typedef {{type: <string>, id: <string>}} RelDescription
+ */
+
+import asyncMW from 'async-mw';
+import {notFoundError, methodNotAllowedError, badRequestError, validationError, jsonErrorHandler} from './apme2/errors';
 
 import {SimpleMemoryCache} from './cache';
+import {loadAllRelationships} from './load-rels';
+import {ObjectsSyncCache} from './objects-sync-cache';
+
+export {jsonErrorHandler, notFoundError, methodNotAllowedError, validationError};
 
 class Collection {
-    constructor(api, type, options) {
-        this.type = type;
-        this.options = {
-            packAttrs: ({id, ...rest}) => rest,
-            unpackAttrs: attrs => ({...attrs}),
-            generateId: options.passId ? (data, passedId) => passedId || uuid() : () => uuid(),
-            ...options,
-            rels: {...options.rels || {}}
-        };
-        for(const relName in this.options.rels) {
-            const rel = this.options.rels[relName];
-            if(rel.type && rel.getId) {
-                rel.getOne = (item) => {
-                    const id = rel.getId(item);
-                    if (id) {
-                        return {
-                            data: {
-                                id: id,
-                                type: rel.type
-                            }
-                        };
-                    }
-                }
-            } else if(rel.type && rel.getIds) {
-                rel.getList = (item) => rel.getIds(item).map(id => ({
-                    id,
-                    type: rel.type
-                }));
-            }
-        }
-        this.api = api;
-    }
-
-    /**
-     * Load single instance raw data (without using cache)
-     * @param {string} id
-     * @param {Context} context
-     * @returns {object}
-     * @private
-     */
-    async _loadOne(id, context) {
-        if(this.options.loadOne) {
-            return await this.options.loadOne(id, context);
-        }
-        if(this.options.loadFew) {
-            return (await this.options.loadFew([id], context))[id];
-        }
-        throw new Error('No method to loadOne');
-    }
-
-    async loadOne(id, context) {
-        const key = `${this.type}:${id}`;
-        return await context._cache.load(
-            key,
-            () => (this._cache.load(
-                key,
-                () => (this._loadOne(id, context))
-            ))
-        );
-    }
-
-    /**
-     * Load few instances raw data (without using cache)
-     * @param {array<string>} ids
-     * @param {Context} context
-     * @returns {object<object>}
-     * @private
-     */
-    async _loadFew(ids, context) {
-        if(this.options.loadFew) {
-            return await this.options.loadFew([ids], context);
-        }
-        if(this.options.loadOne) {
-            const res = {};
-            for(const id in ids) {
-                res[id] = await this.options.loadOne(id, context);
-            }
-            return res;
-        }
-
-        throw new Error('No method to loadOne');
-    }
-
     async loadFew(ids, context) {
-        const keys = ids.map(id => `${this.type}:${id}`);
-        return await context._cache.mload(
-            keys,
-            keys => (this._cache.mload(
-                keys,
-                keys => (this._loadFew(keys.map(key => key.split(':')[1]), context))
+        return await context.cache.mload(this.type, ids, ids => (
+            this.cache.mload(ids, ids => (
+                this._loadFew(ids, context)
             ))
-        );
+        ));
     }
 
     pack(item) {
@@ -135,34 +59,38 @@ class Collection {
         return res;
     }
 
-    getRels(item) {
-        const rels = {};
-        for(const relName in this.options.rels) {
-            const rel = this.options.rels[relName];
-            if(rel.getList) {
-                rels[relName] = rel.getList(item);
-            } else if(rel.getOne) {
-                rels[relName] = rel.getOne(item);
-            }
+    /**
+     * @param {object} item
+     * @param {string} relName
+     * @returns {RelDescription,array<RelDescription>,null}
+     */
+    getRel(item, relName) {
+        const rel = this.options.rels[relName];
+        if(rel.getList) {
+            return rel.getList(item);
+        } else if(rel.getOne) {
+            return rel.getOne(item);
         }
-        return rels;
+        return null;
     }
-}
 
-class Context {
-    constructor(api, req) {
-        this.cache = new SimpleMemoryCache();
-        this.api = api;
-        this.req = req;
+    parseSort(sortString) {
+        /*if(req.query.sort) {
+         query.sort = parseSort(req.query.sort);
+         let ok = false;
+         if(typeof req.collection.allowSort == 'function') {
+         ok = req.collection.allowSort(query.sort);
+         }
+         // @todo: validate other patterns
+         if(!ok) {
+         throw badRequestError('Sort is not allowed for collection');
+         }
+         }*/
     }
 }
 
 export class Api {
-    define(name, options) {
-        this._collections[name] = new Collection(this, name, options);
-    }
-
     expressRouter() {
-
+        return router;
     }
 }
