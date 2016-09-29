@@ -7,7 +7,7 @@ export class Cache {
         const few = {};
         for(const key of keys) {
             const cached = await this.get(key);
-            if(cached) {
+            if(cached !== undefined) {
                 few[key] = cached;
             }
         }
@@ -23,21 +23,35 @@ export class Cache {
             await this.remove(key);
         }
     };
-    async load(key, loader) {
-        let data = await this.get(key);
-        if(!data) {
-            data = await loader();
-            await this.set(key, data);
+    async load(key, options, loader) {
+        if(!loader) {
+            loader = options;
+            options = {};
         }
-        return data;
+        let cached = await this.get(key);
+        if(cached === undefined) {
+            cached = await loader();
+            const setPromise = this.set(key, cached);
+            if(!options.fast) {
+                await setPromise;
+            }
+        }
+        return cached;
     }
-    async mload(keys, loader) {
+    async mload(keys, options, loader) {
+        if(!loader) {
+            loader = options;
+            options = {};
+        }
         const few = await this.mget(keys);
-        keys = keys.filter(id => !!few[id]);
+        keys = keys.filter(id => few[id] !== undefined);
 
         if(keys.length) {
             const res = await loader(keys);
-            await this.mset(res);
+            const setPromise = this.mset(res);
+            if(!options.fast) {
+                await setPromise;
+            }
             for(const key in res) {
                 few[key] = res;
             }
@@ -63,13 +77,13 @@ export class SimpleMemoryCache extends Cache {
             this._tmr = null;
         }
     }
-    setOne(key, value) {
+    set(key, value) {
         this._cache[key] = value;
     }
-    getOne(key) {
+    get(key) {
         return this._cache[key];
     }
-    removeOne(key) {
+    remove(key) {
         delete this._cache[key];
     }
 }

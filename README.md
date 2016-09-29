@@ -187,14 +187,14 @@ API
         async function(id, context)
         ```
         
-    * {object} access
+    * {object} perms
        
         ```
-        read(obj, context)
-        write(obj, context)
-        create(obj, context)
-        update(obj, context)
-        passCustomId(obj, context)
+        read(context, object)
+        write(context, object)
+        create(context, object)
+        update(context, object)
+        passCustomId(context, object)
         ```        
        
     * {mixed} __allowSort__

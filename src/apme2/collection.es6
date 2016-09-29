@@ -60,6 +60,49 @@ export class Collection {
         this.createOne = options.createOne || function() {
             throw new Error('Method not allowed');
         };
+        this.removeOne = options.removeOne || function() {
+            throw new Error('Method not allowed');
+        };
+
+        // perms
+        function wrapPerm(perms, names) {
+            for(const name of names) {
+                if(perms[name] != null) {
+                    if(typeof perms[name] == 'function') {
+                        return {
+                            byContext: perms[name]
+                        }
+                    } else {
+                        return {
+                            'const': perms[name]
+                        }
+                    }
+                }
+                if(perms[`${name}One`] || perms[`${name}Few`]) {
+                    const res = {};
+                    if(perms[`${name}One`]) {
+                        res.one = perms[`${name}One`];
+                    }
+                    if(perms[`${name}Few`]) {
+                        res.few = perms[`${name}Few`];
+                    }
+                    return res;
+                }
+            }
+            return {
+                'const': true
+            };
+        }
+        const perms = options.perms || {};
+        this.perms = {
+            create: wrapPerm(perms, ['create', 'write', 'any']),
+            update: wrapPerm(perms, ['update', 'write', 'any']),
+            remove: wrapPerm(perms, ['remove', 'write', 'any']),
+            read: wrapPerm(perms, ['read', 'any'])
+        };
+
+        // (context, data, oldData, operation)
+
         // this.unpackAttrs = options.unpackAttrs || : attrs => ({...attrs}),
         // generateId: options.passId ? (data, passedId) => passedId || uuid() : () => uuid(),
         /*this.options = {

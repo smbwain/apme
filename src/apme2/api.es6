@@ -93,7 +93,7 @@ export class Api {
 
             const resource = await context.resource(type, id).load();
             if(!resource.exists) {
-                throw notFoundError();
+                throw errors.notFoundError();
             }
 
             const fields = collection.parseFields(req.query.fields);
@@ -210,6 +210,9 @@ export class Api {
                     await resource.update(
                         req.collection.unpackForUpdate(body.data)
                     );
+                    if(!resource.exists) {
+                        throw errors.notFoundError();
+                    }
                 } else {
                     await resource.create(
                         req.collection.unpackForCreate(body.data)
@@ -234,7 +237,9 @@ export class Api {
         router.delete('/:collection/:id', asyncMW(async (req, res) => {
             const context = this.context({req});
 
-            await context.resource(req.type, req.id).remove();
+            if(!await context.resource(req.type, req.id).remove()) {
+                throw errors.notFoundError();
+            }
 
             res.status(204).send();
             return null;

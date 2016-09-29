@@ -18,7 +18,7 @@ const users = [{
 }];
 
 
-function makeRequest(path, opts) {
+function makeRequest(path, opts, {expectedCode = 200} = {}) {
     opts = opts || {};
     return new Promise((resolve, reject) => {
         request(`http://127.0.0.1:${TEST_PORT}${path}`, opts, (err, response, body) => {
@@ -26,7 +26,7 @@ function makeRequest(path, opts) {
                 reject(err);
                 return;
             }
-            if (response.statusCode != 200) {
+            if (response.statusCode != expectedCode) {
                 err = new Error(`Wrong status code: ${response.statusCode}`);
                 err.statusCode = response.statusCode;
                 reject(err);
@@ -36,29 +36,37 @@ function makeRequest(path, opts) {
         })
     });
 }
-describe('apme', () => {
+describe('basic crud', () => {
 
     let server;
 
     it('should start server', done => {
         const api = new Api();
         api.define('users', {
-            loadList: () => (users),
-            loadOne: id => (users.find(user => user.id == id)),
-            updateOne: ({id, ...rest}) => {
+            loadList: async () => (users),
+            loadOne: async id => (users.find(user => user.id == id)),
+            updateOne: async (id, data) => {
                 const index = users.findIndex(user => user.id == id);
                 if(index == -1) {
                     return null;
                 }
                 users[index] = {
                     ...users[index],
-                    ...rest
+                    ...data
                 };
                 return users[index];
             },
-            createOne: data => {
-                users.push(data);
+            createOne: async (id, data) => {
+                users.push({id, ...data});
                 return data;
+            },
+            removeOne: async id => {
+                const index = users.findIndex(user => user.id == id);
+                if(index == -1) {
+                    return false;
+                }
+                users.splice(index, 1);
+                return true;
             }
         });
 
@@ -73,7 +81,7 @@ describe('apme', () => {
         server = app.listen(TEST_PORT, done);
     });
 
-    it('should get users list', async () => {
+    it('should get records list', async () => {
         const res = await makeRequest('/api/users');
         assert.deepEqual(JSON.parse(res), {
             data: [{
@@ -92,7 +100,7 @@ describe('apme', () => {
         });
     });
 
-    it('should get single user', async () => {
+    it('should get single record', async () => {
         const res = await makeRequest('/api/users/2');
         assert.deepEqual(JSON.parse(res), {
             data: {
@@ -105,7 +113,13 @@ describe('apme', () => {
         });
     });
 
-    it('should update user', async() => {
+    it('shouldn\'t get unexisting record', async() => {
+        await makeRequest('/api/users/10', {}, {
+            expectedCode: 404
+        });
+    });
+
+    it('should update record', async() => {
         const res = await makeRequest('/api/users/2', {
             method: 'PATCH',
             headers: {
@@ -131,7 +145,25 @@ describe('apme', () => {
         });
     });
 
-    it('should create user', async() => {
+    it('shouldn\'t update unexisting record', async() => {
+        await makeRequest('/api/users/10', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/vnd.api+json'
+            },
+            body: JSON.stringify({
+                data: {
+                    attributes: {
+                        lastName: 'Watson'
+                    }
+                }
+            })
+        }, {
+            expectedCode: 404
+        });
+    });
+
+    it('should create record', async() => {
         const res = await makeRequest('/api/users', {
             method: 'POST',
             headers: {
@@ -157,7 +189,23 @@ describe('apme', () => {
         });
     });
 
-    it('shoud close server', done => {
+    it('should delete record', async() => {
+        await makeRequest('/api/users/1', {
+            method: 'DELETE'
+        }, {
+            expectedCode: 204
+        });
+    });
+
+    it('shouldn\'t delete unexisting record', async() => {
+        await makeRequest('/api/users/10', {
+            method: 'DELETE'
+        }, {
+            expectedCode: 404
+        });
+    });
+
+    it('should close server', done => {
         server.close(done);
     })
 

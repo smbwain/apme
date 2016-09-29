@@ -1,4 +1,6 @@
 
+import {forbiddenError} from './errors';
+
 export class Resource {
     constructor(context, type, id, object) {
         this.context = context;
@@ -18,6 +20,9 @@ export class Resource {
     async load() {
         if(!this.loaded) {
             this.object = (await this.context.api.collections[this.type].loadOne(this.id)) || null;
+            if(!await this.checkPermission('read')) {
+                throw forbiddenError();
+            }
         }
         return this;
     }
@@ -31,23 +36,38 @@ export class Resource {
     }
     async update(data) {
         this._attachObject(
-            await this.context.api.collections[this.type].updateOne(data)
+            await this.context.api.collections[this.type].updateOne(this.id, data, this.context)
         );
         return this;
     }
     async create(data) {
         this._attachObject(
-            await this.context.api.collections[this.type].createOne(data)
+            await this.context.api.collections[this.type].createOne(this.id, data, this.context)
         );
         return this;
     }
     async remove() {
-        throw new Error('Not implemented');
-        // @todo
+        return await this.context.api.collections[this.type].removeOne(this.id, this.context);
     }
     async include(include) {
         // @todo
         return new ResourcesMixedList(this.context);
+    }
+    async checkPermission(operation) {
+        if(this.context.privileged) {
+            return true;
+        }
+        const perm = this.context.api.collections[this.type].perms[operation];
+        if(perm.const != null) {
+            return perm.const;
+        }
+        if(perm.byContext) {
+            return await perm.byContext(this.context);
+        }
+        if(perm.one) {
+            return await perm.one(this, operation);
+        }
+        return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation);
     }
     /*toString() {
         return JSON.stringify({
@@ -55,10 +75,6 @@ export class Resource {
             type: this.type,
             object: this.object
         });
-    }*/
-    // unpack() {}
-    /*async load(context) {
-        context.loadOne(this);
     }*/
 }
 
@@ -152,13 +168,49 @@ export class ResourcesTypedList extends AbstractResourcesList {
         super.push(resource);
     }
     async load() {
+        if(this.loaded) {
+            return this;
+        }
         await this.context.loadFew(this.type, this.items.filter(item => !item.loaded));
         this.loaded = true;
+        if(!await this.checkPermission('read')) {
+            throw forbiddenError();
+        }
+        return this;
+    }
+    splitByType() {
+        return {
+            [this.type]: this
+        };
+    }
+    async checkPermission(operation) {
+        if(this.context.privileged) {
+            return true;
+        }
+        const perm = this.context.api.collections[this.type].perms[operation];
+        if(perm.const != null) {
+            return perm.const;
+        }
+        if(perm.byContext) {
+            return await perm.byContext(this.context);
+        }
+        if(perm.few) {
+            return await perm.few(this, operation);
+        }
+        for(const item of this.items) {
+            if(!await perm.one(item, operation)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
 
 export class ResourcesMixedList extends AbstractResourcesList {
     async load() {
+        if(this.loaded) {
+            return this;
+        }
         const map = {};
         for(const item of this.items) {
             if(!item.loaded) {
@@ -171,32 +223,51 @@ export class ResourcesMixedList extends AbstractResourcesList {
         }
         await Promise.all(promises);
         this.loaded = true;
+        if(!await this.checkPermission('read')) {
+            throw forbiddenError();
+        }
+        return this;
+    }
+    splitByType() {
+        const map = {};
+        for(const item of this.items) {
+            if(map[item.type]) {
+                map[item.type] = new ResourcesTypedList(this.context, item.type);
+            }
+            map[item.type].push(item);
+        }
+        return map;
+    }
+    async checkPermission(operation) {
+        const byType = this.splitByType();
+        const promises = [];
+        for(const type in byType) {
+            promises.push(byType[type].checkPermission(operation));
+        }
+        return (await Promise.all(promises)).every(res => res);
     }
 }
 
-export class ResourceTypedQuery {
+export class ResourceTypedQuery extends ResourcesTypedList {
     constructor(context, type, params) {
-        this.context = context;
-        this.type = type;
+        super(context, type);
         this.params = params;
     }
     async load() {
-        const objects = await this.context.api.collections[this.type].loadList(this.params);
-        return new ResourcesTypedList(
-            this.context,
-            this.type,
-            objects.map(object => this.context.resource(this.type, object.id, object))
-        );
-    }
-    /*pack() {
-        const res = {
-            links: {
-                self: this.context.api.buildPath(this.type, this.params)
-            }
-        };
         if(this.loaded) {
-            res.data = this.pack();
+            return this;
         }
-        return res;
-    }*/
+        this.items = (await this.context.api.collections[this.type].loadList(this.params)).map(object => {
+            return this.context.resource(this.type, object.id, object);
+        });
+        this.loaded = true;
+        if(!await this.checkPermission('read')) {
+            throw forbiddenError();
+        }
+        return this;
+    }
+    async checkPermission(operation) {
+        await this.load();
+        return await ResourcesTypedList.prototype.checkPermission.call(this, operation);
+    }
 }

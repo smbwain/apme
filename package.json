@@ -18,7 +18,7 @@
   "license": "ISC",
   "dependencies": {
     "async-mw": "0.0.1",
-    "body-parser": "^1.15.2",
+    "body-parser": "1.15.2",
     "joi": "9.0.4",
     "uuid": "2.0.3"
   },
@@ -26,15 +26,15 @@
     "node": ">=5"
   },
   "devDependencies": {
-    "babel-plugin-transform-object-rest-spread": "6.8.0",
+    "babel-plugin-transform-object-rest-spread": "6.16.0",
     "babel-preset-es2016-node5": "1.1.2",
     "express": "4.14.0",
     "gulp": "3.9.1",
     "gulp-babel": "6.1.2",
     "gulp-sourcemaps": "1.6.0",
-    "mocha": "3.0.2",
-    "request": "2.74.0",
-    "source-map-support": "0.4.2"
+    "mocha": "3.1.0",
+    "request": "2.75.0",
+    "source-map-support": "0.4.3"
   },
   "peerDependencies": {
     "express": ">=4"
