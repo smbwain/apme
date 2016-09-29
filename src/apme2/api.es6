@@ -207,16 +207,14 @@ export class Api {
                 const resource = context.resource(req.type, body.data.id);
 
                 if(patch) {
-                    await resource.update(
-                        req.collection.unpackForUpdate(body.data)
-                    );
+                    resource.setData(req.collection.unpackForUpdate(body.data));
+                    await resource.update();
                     if(!resource.exists) {
                         throw errors.notFoundError();
                     }
                 } else {
-                    await resource.create(
-                        req.collection.unpackForCreate(body.data)
-                    );
+                    resource.setData(req.collection.unpackForCreate(body.data));
+                    await resource.create();
                 }
 
                 const fields = collection.parseFields(req.query.fields);

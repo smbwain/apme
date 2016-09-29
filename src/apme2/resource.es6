@@ -8,6 +8,10 @@ export class Resource {
         this.id = id;
         this.object = object;
     }
+    setData(data) {
+        this.data = data;
+        return this;
+    }
     _attachObject(object) {
         this.object = object;
     }
@@ -34,19 +38,30 @@ export class Resource {
         };
         // @todo
     }
-    async update(data) {
+    async update() {
+        if(!await this.checkPermission('read') || !await this.checkPermission('update')) {
+            throw forbiddenError();
+        }
         this._attachObject(
-            await this.context.api.collections[this.type].updateOne(this.id, data, this.context)
+            await this.context.api.collections[this.type].updateOne(this.id, this.data, this.context)
         );
+        delete this.data;
         return this;
     }
-    async create(data) {
+    async create() {
+        if(!await this.checkPermission('read') || !await this.checkPermission('create')) {
+            throw forbiddenError();
+        }
         this._attachObject(
-            await this.context.api.collections[this.type].createOne(this.id, data, this.context)
+            await this.context.api.collections[this.type].createOne(this.id, this.data, this.context)
         );
+        delete this.data;
         return this;
     }
     async remove() {
+        if(!await this.checkPermission('read') || !await this.checkPermission('remove')) {
+            throw forbiddenError();
+        }
         return await this.context.api.collections[this.type].removeOne(this.id, this.context);
     }
     async include(include) {
