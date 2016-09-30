@@ -9,6 +9,8 @@ gulp.task('build', function() {
             presets: ['es2016-node5'],
             plugins: ['transform-object-rest-spread']
         }))
-        .pipe(sourcemaps.write('.'))
+        .pipe(sourcemaps.write('.', {
+            sourceRoot: '/src'
+        }))
         .pipe(gulp.dest('./dist'));
 });

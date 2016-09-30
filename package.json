@@ -4,7 +4,9 @@
   "description": "Lightweight jsonapi server middleware for express",
   "main": "dist/apme2/index.js",
   "scripts": {
-    "test": "gulp build && mocha dist/tests"
+    "build": "gulp build",
+    "test": "mocha dist/tests",
+    "test-cov": "node_modules/.bin/nyc -e .es6 --require babel-core/register --reporter=lcov --reporter=text node_modules/.bin/mocha src/tests/*.es6"
   },
   "repository": {
     "type": "git",

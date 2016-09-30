@@ -136,6 +136,7 @@ export class Api {
                     }
                 } else {
                     if(body.data.id) {
+                        // @todo
                         // if(!context.hasPermission('passId', resource)) {
                         //    throw errors.forbiddenError(`Passing id is permitted`);
                         // }
@@ -143,19 +144,6 @@ export class Api {
                         body.data.id = await collection.generateID();
                     }
                 }
-
-                // const resource = context.resource(body.data.type, body.data.id).unpack(body.data);
-                /*if(!patch && body.data.id && ) {
-
-                }*/
-
-                /*if(!patch)
-                const object = req.collection.unpackAttrs(attributes);
-                if(patch) {
-                    object.id = req.params.id;
-                } else {
-                    object.id = req.collection.generateId(data, req.body.data.id);
-                }*/
 
                 /*const passedRels = req.body.data.relationships || {};
                 for(const relName in passedRels) {
@@ -190,11 +178,6 @@ export class Api {
                         }
                         data = {...data, ...relDefinition.fromId(passedRels[relName].data.id)};
                     }
-                }
-                if(patch) {
-                    data.id = req.params.id;
-                } else {
-                    data.id = req.collection.generateId(data, req.body.data.id);
                 }
 
                 if(req.collection.beforeEditOne) {
