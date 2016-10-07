@@ -73,7 +73,7 @@ describe('simple perms', () => {
                     return !!(context.req && context.req.user);
                 },
                 writeOne: resource => {
-                    return !!(resource.context.req && resource.context.req.user && resource.context.req.user.id == resource.id);
+                    return !!(resource.context.req && resource.context.req.user && (resource.context.req.user.id == '999' || resource.context.req.user.id == resource.id));
                 }
             }
         });
@@ -267,12 +267,32 @@ describe('simple perms', () => {
         });
     });
 
-    // @todo: resolve creating permissions
-    /*it('should create record', async() => {
+    it('shouldn\'t create record', async() => {
+        await makeRequest('/api/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/vnd.api+json',
+                'X-User': 8
+            },
+            body: JSON.stringify({
+                data: {
+                    id: '7',
+                    attributes: {
+                        name: 'Joan'
+                    }
+                }
+            })
+        }, {
+            expectedCode: 403
+        });
+    });
+
+    it('should create record', async() => {
         const res = await makeRequest('/api/users', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/vnd.api+json'
+                'Content-Type': 'application/vnd.api+json',
+                'X-User': 999
             },
             body: JSON.stringify({
                 data: {
@@ -292,7 +312,7 @@ describe('simple perms', () => {
                 }
             }
         });
-    });*/
+    });
 
     it('shouldn\'t delete record 1', async() => {
         await makeRequest('/api/users/1', {
