@@ -40,7 +40,7 @@ describe('basic crud', () => {
 
     let server;
 
-    it('should start server', done => {
+    before('should start server', done => {
         const api = new Api();
         api.define('users', {
             loadList: async () => (users),
@@ -77,8 +77,14 @@ describe('basic crud', () => {
                 return contentType == 'application/vnd.api+json' || contentType == 'application/json';
             }
         }));
-        app.use('/api', api.expressRouter(), jsonErrorHandler());
+        app.use('/api', api.expressRouter({
+            url: '/api/'
+        }), jsonErrorHandler());
         server = app.listen(TEST_PORT, done);
+    });
+
+    after('should close server', done => {
+        server.close(done);
     });
 
     it('should get records list', async () => {
@@ -96,7 +102,10 @@ describe('basic crud', () => {
                 attributes: {
                     name: 'Piter'
                 }
-            }]
+            }],
+            links: {
+                self: '/api/users'
+            }
         });
     });
 
@@ -109,7 +118,8 @@ describe('basic crud', () => {
                 attributes: {
                     name: 'Piter'
                 }
-            }
+            },
+            links: { self: '/api/users/2' }
         });
     });
 
@@ -141,7 +151,8 @@ describe('basic crud', () => {
                     name: 'Piter',
                     lastName: 'Watson'
                 }
-            }
+            },
+            links: { self: '/api/users/2' }
         });
     });
 
@@ -185,7 +196,8 @@ describe('basic crud', () => {
                 attributes: {
                     name: 'Joan'
                 }
-            }
+            },
+            links: { self: '/api/users/7' }
         });
     });
 
@@ -204,9 +216,4 @@ describe('basic crud', () => {
             expectedCode: 404
         });
     });
-
-    it('should close server', done => {
-        server.close(done);
-    })
-
 });

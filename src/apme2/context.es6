@@ -20,6 +20,10 @@ export class Context {
         return resource;
     }
 
+    resources(type, ids) {
+        return ids.map(id => this.resource(type, id));
+    }
+
     list(type, params) {
         return new ResourceTypedQuery(this, type, params);
     }

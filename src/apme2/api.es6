@@ -14,25 +14,28 @@ const schemas = {};
         id: Joi.string().required(),
         type: Joi.string().required()
     });
-    const relationship = Joi.object().unknown(false).keys({
+    schemas.relationship = Joi.object().unknown(false).keys({
         data: Joi.alternatives().required().try(
             Joi.array().items(rel),
             rel
         )
+    });
+    schemas.relationshipToMany = Joi.object().unknown(false).keys({
+        data: Joi.array(rel)
     });
     schemas.update = Joi.object().required().keys({
         data: Joi.object().required().unknown(false).keys({
             id: Joi.string(),
             type: Joi.string(),
             attributes: Joi.object(),
-            relationships: Joi.object().pattern(/.*/, relationship)
+            relationships: Joi.object().pattern(/.*/, schemas.relationship)
         })
     });
 }
 
 
 export class Api {
-    constructor() {
+    constructor(options = {}) {
         this.collections = {};
     }
 
@@ -44,8 +47,38 @@ export class Api {
         return new Context(this, options);
     }
 
-    expressRouter() {
+    expressRouter({url = '/'} = {}) {
         const router = require('express').Router();
+
+        function urlBuilder(path) {
+            return url+path;
+        }
+
+        /*function packItem(resource, fields) {
+            if(!resource) {
+                return null;
+            }
+            const packed = resource.pack(fields);
+            packed.links = {
+                self: urlBuilder(`${resource.type}/${resource.id}`)
+            };
+        }
+
+        function packCollection(collection, fields) {
+            return {
+                data: collection.items.map(resource => packItem(resource, fields[resource.type])),
+                links: {
+                    // @todo
+                }
+            }
+        }
+
+        function packRef(resource, context, relName) {
+            const packed = resource.packRef();
+            return {
+                data: resource
+            }
+        }*/
 
         router.param('collection', (req, res, next, type) => {
             req.collection = this.collections[type];
@@ -78,11 +111,15 @@ export class Api {
             const page = req.query.page;
 
             const list = await context.list(type, {sort, page, filter}).load();
-            const included = (await list.include(include)).packItems(fields);
+            const included = (await list.include(include)).packItems(fields, urlBuilder);
 
             return {
-                data: list.packItems(fields),
-                included: included.length ? included : undefined
+                // @todo: links
+                data: list.packItems(fields, urlBuilder),
+                included: included.length ? included : undefined,
+                links: {
+                    self: urlBuilder(`${type}`) // @todo: params
+                }
             };
         }));
 
@@ -99,11 +136,15 @@ export class Api {
             const fields = collection.parseFields(req.query.fields);
             const include = req.query.include && req.collection.parseInclude(req.query.include);
 
-            const included = (await resource.include(include)).packItems(fields);
+            const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
             return {
-                data: resource.pack(fields[type]),
-                included: included.length ? included : undefined
+                // @todo: links
+                data: resource.pack(fields[type], urlBuilder),
+                included: included.length ? included : undefined,
+                links: {
+                    self: urlBuilder(`${type}/${id}`) // @todo: params
+                }
             };
         }));
 
@@ -203,11 +244,15 @@ export class Api {
                 const fields = collection.parseFields(req.query.fields);
                 const include = req.query.include && req.collection.parseInclude(req.query.include);
 
-                const included = (await resource.include(include)).packItems(fields);
+                const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
                 return {
-                    data: resource.pack(fields),
-                    included: included.length ? included : undefined
+                    // @todo: links
+                    data: resource.pack(fields, urlBuilder),
+                    included: included.length ? included : undefined,
+                    links: {
+                        self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
+                    }
                 };
             });
         };
@@ -229,17 +274,66 @@ export class Api {
         router.get('/:collection/:id/:relName', asyncMW(async req => {
             const context = this.context({req});
 
+            const {collection} = req;
+            const {type, id} = req;
+            const {relName} = req.params;
+
+            const rel = collection.rels[relName];
+            if(!rel) {
+                throw errors.notFoundError('No relation with such name');
+            }
+
+            const mainResource = await context.resource(type, id).load();
+            if(!mainResource.exists) {
+                throw errors.notFoundError();
+            }
+
+            const fields = collection.parseFields(req.query.fields);
+
+            let data = null;
+            if(rel.toOne) {
+                const resource = await rel.getResourceOne(mainResource);
+                if(resource) {
+                    await resource.load();
+                    if(resource.exists) {
+                        data = resource.pack(fields[resource.type], urlBuilder);
+                    }
+                }
+            } else {
+                const list = await rel.getListOne(mainResource);
+                await list.load();
+                data = list.packItems(fields, urlBuilder);
+            }
+
+            // @todo: add included
+
+            return {
+                data,
+                links: {
+                    self: urlBuilder(`${type}/${id}/${relName}`)
+                }
+            };
+
+            // const include = req.query.include && req.collection.parseInclude(req.query.include);
+            // const included = (await resource.include(include)).packItems(fields);
+
+            /*return {
+                data: mainResource.pack(fields[type])
+                //included: included.length ? included : undefined
+            };*/
+
+
             // @todo
             /*const rel = req.collection.rels[req.params.relName];
             if(!rel) {
                 throw notFoundError('No relation with such name');
-            }
+            }*/
 
-            if(req.query.include) {
+            /*if(req.query.include) {
                 context.include = parseInclude(req.query.include);
-            }
+            }*/
 
-            const mainData = (await req.collection.loadByIdsAndPack([req.params.id], context))[0];
+            /*const mainData = (await req.collection.loadByIdsAndPack([req.params.id], context))[0];
             if(!mainData) {
                 throw notFoundError();
             }
@@ -257,8 +351,73 @@ export class Api {
             };*/
         }));
 
+        router.get('/:collection/:id/relationships/:relName', asyncMW(async req => {
+            const context = this.context({req});
+
+            const {collection} = req;
+            const {type, id} = req;
+            const {relName} = req.params;
+
+            const rel = collection.rels[relName];
+            if(!rel) {
+                throw errors.notFoundError('No relation with such name');
+            }
+
+            const mainResource = await context.resource(type, id).load();
+            if(!mainResource.exists) {
+                throw errors.notFoundError();
+            }
+
+            let data;
+            if(rel.toOne) {
+                const resource = await rel.getResourceOne(mainResource);
+                data = resource ? resource.packRef() : null
+            } else {
+                const list = await rel.getListOne(mainResource);
+                await list.load();
+                console.log('>>list', list);
+                data = list.packRefs();
+            }
+
+            return {
+                data,
+                links: {
+                    self: urlBuilder(`${type}/${id}/relationships/${relName}`),
+                    related: urlBuilder(`${type}/${id}/${relName}`)
+                }
+            }
+        }));
+
+        router.patch('/:collection/:id/relationships/:relName', asyncMW(async req => {
+            const body = await new Promise((resolve, reject) => {
+                Joi.validate(req.body, schemas.relationship, (err, value) => {
+                    err ? reject(err) : resolve(value);
+                });
+            });
+            // @todo
+            // @todo: return 400 on error
+        }));
+
+        router.post('/:collection/:id/relationships/:relName', asyncMW(async req => {
+            const body = await new Promise((resolve, reject) => {
+                Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
+                    err ? reject(err) : resolve(value);
+                });
+            });
+            // @todo
+            // @todo: return 400 on error
+        }));
+
+        router.delete('/:collection/:id/relationships/:relName', asyncMW(async req => {
+            const body = await new Promise((resolve, reject) => {
+                Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
+                    err ? reject(err) : resolve(value);
+                });
+            });
+            // @todo
+            // @todo: return 400 on error
+        }));
+
         return router;
     }
-
-
 }

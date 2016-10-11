@@ -17,6 +17,20 @@ const users = [{
     name: 'Piter'
 }];
 
+const books = [{
+    id: 'good-parts',
+    name: 'Good parts',
+    ownerId: '1'
+}, {
+    id: 'better-parts',
+    name: 'Better parts',
+    ownerId: '2'
+}, {
+    id: 'foo',
+    name: 'Foo',
+    ownerId: '1'
+}];
+
 
 function makeRequest(path, opts, {expectedCode = 200} = {}) {
     opts = opts || {};
@@ -36,58 +50,39 @@ function makeRequest(path, opts, {expectedCode = 200} = {}) {
         })
     });
 }
-describe('simple perms', () => {
+describe('rels', () => {
 
     let server;
 
-    before('should start server', done => {
+    before(done => {
         const api = new Api();
         api.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
-            updateOne: async (id, data) => {
-                const index = users.findIndex(user => user.id == id);
-                if(index == -1) {
-                    return null;
+            rels: {
+                ownedBooks: {
+                    toMany: 'books',
+                    getFilterOne: resource => ({
+                        ownerId: resource.id
+                    })
                 }
-                users[index] = {
-                    ...users[index],
-                    ...data
-                };
-                return users[index];
-            },
-            createOne: async (id, data) => {
-                users.push({id, ...data});
-                return data;
-            },
-            removeOne: async id => {
-                const index = users.findIndex(user => user.id == id);
-                if(index == -1) {
-                    return false;
-                }
-                users.splice(index, 1);
-                return true;
-            },
-            perms: {
-                read: context => {
-                    return !!(context.req && context.req.user);
-                },
-                writeOne: resource => {
-                    return !!(resource.context.req && resource.context.req.user && (resource.context.req.user.id == '999' || resource.context.req.user.id == resource.id));
+            }
+        });
+        api.define('books', {
+            packAttrs: ({name}) => ({name}),
+            loadList: async ({filter: {ownerId} = {}}) => (
+                books.filter(book => !ownerId || book.ownerId == ownerId)
+            ),
+            loadOne: async id => (books.find(user => user.id == id)),
+            rels: {
+                owner: {
+                    toOne: 'users',
+                    getIdOne: resource => resource.object.ownerId
                 }
             }
         });
 
         const app = express();
-        app.use((req, res, next) => {
-            const id = req.get('x-user');
-            if(id) {
-                req.user = {
-                    id
-                };
-            }
-            next();
-        });
         app.use(bodyParser.json({
             type: req => {
                 const contentType = req.get('content-type');
@@ -100,43 +95,189 @@ describe('simple perms', () => {
         server = app.listen(TEST_PORT, done);
     });
 
-    after('should close server', done => {
+    after(done => {
         server.close(done);
     });
 
-    it('shouldn\'t get records list (403)', async () => {
-        await makeRequest('/api/users', {}, {
-            expectedCode: '403'
+    it('should get book\'s owner link', async () => {
+        const res = await makeRequest('/api/books/better-parts/relationships/owner');
+        assert.deepEqual(JSON.parse(res), {
+            "data": {
+                "id": "2",
+                "type": "users"
+            },
+            "links": {
+                self: '/api/books/better-parts/relationships/owner',
+                related: '/api/books/better-parts/owner'
+            }
         });
     });
 
-    it('should get records list', async () => {
-        const res = await makeRequest('/api/users', {
-            headers: {
-                'x-user': '1'
+    it('should get book\'s owner object', async () => {
+        const res = await makeRequest('/api/books/better-parts/owner');
+        assert.deepEqual(JSON.parse(res), {
+            "data": {
+                "id": "2",
+                "type": "users",
+                "attributes": {
+                    "name": "Piter"
+                },
+                "relationships": {
+                    "ownedBooks": {
+                        "links": {
+                            "self": "/api/users/2/relationships/ownedBooks"
+                        }
+                    }
+                }
+            },
+            "links": {
+                "self": "/api/books/better-parts/owner"
             }
         });
+    });
+
+    it('should get owned links', async () => {
+        const res = await makeRequest('/api/users/1/relationships/ownedBooks');
         assert.deepEqual(JSON.parse(res), {
-            data: [{
-                id: '1',
-                type: 'users',
-                attributes: {
-                    name: 'Jack'
+            "data": [{
+                "id": "good-parts",
+                "type": "books"
+            }, {
+                "id": "foo",
+                "type": "books"
+            }],
+            "links": {
+                "related": "/api/users/1/ownedBooks",
+                "self": "/api/users/1/relationships/ownedBooks"
+            }
+        });
+    });
+
+    it('should get owned objects', async () => {
+        const res = await makeRequest('/api/users/1/ownedBooks');
+        assert.deepEqual(JSON.parse(res), {
+            "data": [{
+                "id": "good-parts",
+                "type": "books",
+                "attributes": {
+                    "name": "Good parts"
+                },
+                "relationships": {
+                    "owner": {
+                        "links": {
+                            "self": "/api/books/good-parts/relationships/owner"
+                        }
+                    }
                 }
             }, {
-                id: '2',
-                type: 'users',
-                attributes: {
-                    name: 'Piter'
+                "id": "foo",
+                "type": "books",
+                "attributes": {
+                    "name": "Foo"
+                },
+                "relationships": {
+                    "owner": {
+                        "links": {
+                            "self": "/api/books/foo/relationships/owner"
+                        }
+                    }
                 }
             }],
             "links": {
-                "self": "/api/users"
+                "self": "/api/users/1/ownedBooks"
             }
         });
     });
 
-    it('shouldn\'t get single record (403)', async () => {
+    it('should get books with owners', async () => {
+        const res = await makeRequest('/api/books?include=owner');
+        assert.deepEqual(JSON.parse(res), {
+            "data": [{
+                id: 'good-parts',
+                type: 'books',
+                attributes: {
+                    name: 'Good parts'
+                },
+                relationships: {
+                    owner: {
+                        data: {
+                            type: 'users',
+                            id: '1'
+                        },
+                        "links": {
+                            "self": "/api/books/good-parts/relationships/owner"
+                        }
+                    }
+                }
+            }, {
+                id: 'better-parts',
+                type: 'books',
+                attributes: {
+                    name: 'Better parts'
+                },
+                relationships: {
+                    owner: {
+                        data: {
+                            type: 'users',
+                            id: '2'
+                        },
+                        "links": {
+                            "self": "/api/books/better-parts/relationships/owner"
+                        }
+                    }
+                }
+            }, {
+                id: 'foo',
+                type: 'books',
+                attributes: {
+                    name: 'Foo'
+                },
+                relationships: {
+                    owner: {
+                        data: {
+                            type: 'users',
+                            id: '1'
+                        },
+                        "links": {
+                            "self": "/api/books/foo/relationships/owner"
+                        }
+                    }
+                }
+            }],
+            "included": [{
+                "id": "1",
+                "type": "users",
+                "attributes": {
+                    "name": "Jack"
+                },
+                "relationships": {
+                    "ownedBooks": {
+                        "links": {
+                            "self": "/api/users/1/relationships/ownedBooks"
+                        }
+                    }
+                }
+            }, {
+                "id": "2",
+                "type": "users",
+                "attributes": {
+                    "name": "Piter"
+                },
+                "relationships": {
+                    "ownedBooks": {
+                        "links": {
+                            "self": "/api/users/2/relationships/ownedBooks"
+                        }
+                    }
+                }
+            }],
+            links: {
+                "self": "/api/books?include=owner"
+            }
+        });
+    });
+
+    /*it('shouldn\'t get single record (403)', async () => {
         await makeRequest('/api/users/2', {}, {
             expectedCode: 403
         });
@@ -154,9 +295,9 @@ describe('simple perms', () => {
                 type: 'users',
                 attributes: {
                     name: 'Piter'
-                }
-            },
-            links: { self: '/api/users/2' }
+                },
+                links: { self: '/users/2' }
+            }
         });
     });
 
@@ -235,9 +376,9 @@ describe('simple perms', () => {
                 attributes: {
                     name: 'Piter',
                     lastName: 'Watson'
-                }
-            },
-            links: { self: '/api/users/2' }
+                },
+                links: { self: '/users/2' }
+            }
         });
     });
 
@@ -320,9 +461,9 @@ describe('simple perms', () => {
                 type: 'users',
                 attributes: {
                     name: 'Joan'
-                }
-            },
-            links: { self: '/api/users/7' }
+                },
+                links: { self: '/users/7' }
+            }
         });
     });
 
@@ -374,4 +515,7 @@ describe('simple perms', () => {
             expectedCode: 404
         });
     });
+
+    */
+
 });

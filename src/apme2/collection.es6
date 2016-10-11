@@ -101,6 +101,12 @@ export class Collection {
             read: wrapPerm(perms, ['read', 'any'])
         };
 
+        // relationships
+        this.rels = {};
+        for(const relName in options.rels || {}) {
+            this.rels[relName] = new Relationship(this, relName, options.rels[relName]);
+        }
+
         // (context, data, oldData, operation)
 
         // this.unpackAttrs = options.unpackAttrs || : attrs => ({...attrs}),
@@ -197,5 +203,70 @@ export class Collection {
             id: data.id,
             ...data.attributes
         };
+    }
+}
+
+class Relationship {
+    constructor(collection, name, options) {
+        if(options.toOne) {
+            this.toOne = true;
+            if(options.toOne == '*') {
+                throw new Error('No implemented');
+            } else {
+                const type = options.toOne;
+                if (options.getIdOne) {
+                    this.getResourceOne = async function (resource) {
+                        // await resource.load();
+                        return resource.context.resource(type, await options.getIdOne(resource));
+                    };
+                    this.getResourceFew = async function (resources) {
+                        const res = Array(resources.length);
+                        for(let i = resources.length-1; i>=0; i--) {
+                            res[i] = resources[i].context.resource(type, await options.getIdOne(resources[i]));
+                        }
+                        return res
+                    };
+                }
+            }
+        } else if(options.toMany) {
+            this.toOne = false;
+            if(options.toOne == '*') {
+                throw new Error('Not implemented');
+            } else {
+                const type = options.toMany;
+                /*if(options.getFilterByObject) {
+                    this.getListOne = async function (resource) {
+                        await resource.load();
+                        return await collection.api.collections[type].loadList({
+                            filter: await options.getFilterByObject(resource.object)
+                        });
+                    }
+                }*/
+                if(options.getFilterOne) {
+                    this.getListOne = async function (resource) {
+                        // await resource.load();
+                        return await resource.context.list(type, {
+                            filter: await options.getFilterOne(resource)
+                        });
+                    }
+                }
+            }
+        } else {
+            throw new Error('toOne or toMany should be specified');
+        }
+    }
+    getOne(resource) {
+        if(this.toOne) {
+            return this.getResourceOne(resource);
+        } else {
+            return this.getListOne(resource);
+        }
+    }
+    getFew(resources) {
+        if(this.toOne) {
+            return this.getResourceFew(resources);
+        } else {
+            return this.getListFew(resources);
+        }
     }
 }

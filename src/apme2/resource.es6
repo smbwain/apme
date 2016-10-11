@@ -7,6 +7,7 @@ export class Resource {
         this.type = type;
         this.id = id;
         this.object = object;
+        this.rels = {};
     }
     setData(data) {
         this.data = data;
@@ -23,20 +24,53 @@ export class Resource {
     }
     async load() {
         if(!this.loaded) {
-            this.object = (await this.context.api.collections[this.type].loadOne(this.id)) || null;
+            this._attachObject( (await this.context.api.collections[this.type].loadOne(this.id)) || null);
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
             }
         }
         return this;
     }
-    pack(fields) {
-        return {
+    async loadRel(relName) {
+        const rel = this.context.api.collections[this.type].rels[relName];
+        if(rel.toOne) {
+            this.rels[relName] = await rel.getResourceOne(this);
+        } else {
+            this.rels[relName] = await rel.getListOne(this);
+        }
+    }
+    pack(fields, urlBuilder) {
+        const collection = this.context.api.collections[this.type];
+        const data = {
             id: this.id,
             type: this.type,
-            attributes: this.context.api.collections[this.type].packAttrs(this.object)
+            attributes: collection.packAttrs(this.object),
+            /*links: {
+                self: urlBuilder(`${this.type}/${this.id}`)
+            }*/
         };
-        // @todo
+        if(Object.keys(collection.rels).length) {
+            data.relationships = {};
+            for(const relName in collection.rels) {
+                data.relationships[relName] = {
+                    links: {
+                        self: urlBuilder(`${this.type}/${this.id}/relationships/${relName}`)
+                    }
+                };
+                if(this.rels[relName] instanceof Resource) {
+                    data.relationships[relName].data = this.rels[relName].packRef();
+                } else if (this.rels[relName] instanceof AbstractResourcesList) {
+                    data.relationships[relName].data = this.rels[relName].packRefs();
+                }
+            }
+        }
+        return data;
+    }
+    packRef() {
+        return {
+            id: this.id,
+            type: this.type
+        };
     }
     async update() {
         if(!await this.checkPermission('read') || !await this.checkPermission('update')) {
@@ -103,6 +137,11 @@ export class ResourcesMap {
     get(type, id) {
         return this._map[type] && this._map[type][id];
     }
+    loopTypes(handler) {
+        for(const type in this._map) {
+            handler(type, this._map[type]);
+        }
+    }
 }
 
 /*export class SyncCache extends ResourcesMap {
@@ -159,15 +198,82 @@ export class AbstractResourcesList {
         this.items = items;
         this.loaded = false;
     }
-    packItems(fields = {}) {
-        return this.items.map(resource => resource.pack(fields[resource.type]));
+    packItems(fields = {}, urlBuilder) {
+        return this.items.map(resource => resource.pack(fields[resource.type], urlBuilder));
+    }
+    packRefs() {
+        return this.items.map(resource => resource.packRef());
     }
     push(resource) {
         this.items.push(resource);
     }
-    include(include) {
-        // @todo
-        return new ResourcesMixedList(this.context);
+    async include(includeTree) {
+        const includedResult = new ResourcesMixedList(this.context);
+
+        if(!includeTree) {
+            return includedResult;
+        }
+
+        const usedMap = this.getMap();
+
+        let includeSets = [
+            {
+                includeTree,
+                list: this
+            }
+        ];
+
+        while(includeSets.length) {
+            // process many includeSets on each step
+
+            const newIncludeSets = [];
+            const needToLoad = new ResourcesMixedList(this.context);
+            for(const includeSet of includeSets) {
+                for(const relName in includeSet.includeTree) {
+                    let list;
+                    if(Object.keys(includeSet.includeTree[relName]).length) {
+                        list = new ResourcesMixedList(this.context);
+                        newIncludeSets.push({
+                            includeTree: includeSet.includeTree[relName],
+                            list
+                        });
+                    }
+                    const split = includeSet.list.splitByType();
+                    for(const type in split) {
+                        const typedList = split[type];
+                        await typedList.loadRel(relName); // @todo: make it simultaneous
+                        for(const item of typedList.items) {
+                            const itemRel = item.rels[relName];
+                            for(const resource of (itemRel instanceof Resource) ? [itemRel] : itemRel.items) {
+                                if(list) {
+                                    list.push(resource); // @todo: what about unique
+                                }
+                                if(!usedMap.get(resource.type, resource.id)) {
+                                    needToLoad.push(resource); // @todo: what about unique
+                                    usedMap.add(resource);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            includeSets = newIncludeSets;
+
+            await needToLoad.load();
+            for(const resource of needToLoad.items) {
+                includedResult.push(resource)
+            }
+        }
+
+        return includedResult;
+    }
+    getMap() {
+        const map = new ResourcesMap();
+        for(const item of this.items) {
+            map.add(item);
+        }
+        return map;
     }
 }
 
@@ -186,12 +292,27 @@ export class ResourcesTypedList extends AbstractResourcesList {
         if(this.loaded) {
             return this;
         }
-        await this.context.loadFew(this.type, this.items.filter(item => !item.loaded));
+
+        const toLoad = this.items.filter(item => !item.loaded);
+        if(!toLoad.length) {
+            return this;
+        }
+
+        const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id));
+        for(const resource of toLoad) {
+            resource._attachObject(res[resource.id] || null);
+        }
+
         this.loaded = true;
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
         }
         return this;
+    }
+    async loadRel(relName) {
+        (await this.context.api.collections[this.type].rels[relName].getFew(this.items)).forEach((related, i) => {
+            this.items[i].rels[relName] = related;
+        });
     }
     splitByType() {
         return {
@@ -226,27 +347,33 @@ export class ResourcesMixedList extends AbstractResourcesList {
         if(this.loaded) {
             return this;
         }
-        const map = {};
+        /*const map = {};
         for(const item of this.items) {
             if(!item.loaded) {
-                (map[item.type] || (map[item.type = []])).push(item);
+                (map[item.type] || (map[item.type] = [])).push(item);
             }
         }
         const promises = [];
         for(const type in map) {
             promises.push(this.context.loadFew(type, map[type]));
         }
+        await Promise.all(promises);*/
+        const split = this.splitByType();
+        const promises = [];
+        for(const type in split) {
+            promises.push(split[type].load());
+        }
         await Promise.all(promises);
         this.loaded = true;
-        if(!await this.checkPermission('read')) {
+        /*if(!await this.checkPermission('read')) {
             throw forbiddenError();
-        }
+        }*/
         return this;
     }
     splitByType() {
         const map = {};
         for(const item of this.items) {
-            if(map[item.type]) {
+            if(!map[item.type]) {
                 map[item.type] = new ResourcesTypedList(this.context, item.type);
             }
             map[item.type].push(item);
