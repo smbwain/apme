@@ -5,6 +5,17 @@ import {Collection} from './collection';
 import {Context} from './context';
 import * as errors from './errors';
 import asyncMW from 'async-mw';
+import {Cache, SimpleMemoryCache, cacheLogMixin} from '../cache';
+
+export function group(arr) {
+    const map = {};
+    for(const item of arr) {
+        map[item.id] = item;
+    }
+    return map;
+}
+
+export {Cache, SimpleMemoryCache, cacheLogMixin};
 
 export const jsonErrorHandler = errors.jsonErrorHandler;
 

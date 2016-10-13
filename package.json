@@ -2,7 +2,7 @@
   "name": "apme",
   "version": "1.0.0",
   "description": "Lightweight jsonapi server middleware for express",
-  "main": "dist/apme2/index.js",
+  "main": "dist/apme2/api.js",
   "scripts": {
     "build": "gulp build",
     "test": "mocha dist/tests",

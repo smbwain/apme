@@ -87,3 +87,40 @@ export class SimpleMemoryCache extends Cache {
         delete this._cache[key];
     }
 }
+
+export function cacheLogMixin(cache) {
+    function msg(...args) {
+        console.log('cache log>>', ...args);
+    }
+    return {
+        ...cache,
+        async get(key) {
+            const res = await cache.get(key);
+            msg(`GET "${key}": ${res !== undefined ? 'hit' : 'missed'}`);
+            return res;
+        },
+        async set(key, data) {
+            await cache.set(key, data);
+            msg(`SET "${key}"`);
+        },
+        async remove(key) {
+            await cache.remove(key);
+            msg(`REMOVE "${key}"`);
+        },
+        async mget(keys) {
+            const res = await cache.mget(keys);
+            msg(`MGET ${keys.map(key => `"${key}"`).join(',')}: ${Object.keys(res).length}/${keys.length} hits`);
+            return res;
+        },
+        async mset(data) {
+            await cache.mset(data);
+            msg(`MSET ${Object.keys(data).map(key => `"${key}"`).join(',')}`);
+        },
+        async mremove(keys) {
+            await cache.mremove(keys);
+            msg(`MREMOVE ${keys.map(key => `"${key}"`).join(',')}`);
+        },
+        //async load() {},
+        //async mload() {}
+    };
+}

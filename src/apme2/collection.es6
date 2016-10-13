@@ -1,5 +1,6 @@
 
 import {methodNotAllowedError} from './errors';
+import querystring from 'querystring';
 
 export class Collection {
     constructor(api, type, options) {
@@ -36,17 +37,44 @@ export class Collection {
 
         // cache
         if(options.cache) {
+            const cache = options.cache;
             this.loadOne = function(id) {
-                return options.cache.load(type, id, () => (
+                return cache.load(`${type}:o:${id}`, () => (
                     this._loadOne(id)
                 ));
             };
             this.loadFew = function(ids) {
-                return options.cache.mload(type, ids, rest => (
+                return cache.mload(ids.map(id => `${type}:o:${ids}`), rest => (
                     this._loadFew(rest)
                 ));
             };
-            // this.loadList
+            this.loadList = async function({filter, page, sort}) {
+                const cacheKey = `${type}:l:${querystring.stringify({filter, sort, page})}`;
+                const ids = await cache.get(cacheKey);
+                if(ids) {
+                    const fromCache = await cache.mget(ids.map(id => `${type}:o:${id}`));
+                    let list = [];
+                    for(const id of ids) {
+                        const value = fromCache[`${type}:o:${id}`];
+                        if(!value) {
+                            list = null;
+                            break;
+                        }
+                        list.push(value);
+                    }
+                    if(list) {
+                        return list;
+                    }
+                }
+                const list = await this._loadList({filter, page, sort});
+                const few = {};
+                for(const item of list) {
+                    few[`${type}:o:${item.id}`] = item;
+                }
+                await cache.mset(few);
+                await cache.set(cacheKey, list.map(item => item.id));
+                return list;
+            }
         } else {
             this.loadOne = this._loadOne;
             this.loadFew = this._loadFew;
@@ -211,7 +239,7 @@ class Relationship {
         if(options.toOne) {
             this.toOne = true;
             if(options.toOne == '*') {
-                throw new Error('No implemented');
+                throw new Error('Not implemented');
             } else {
                 const type = options.toOne;
                 if (options.getIdOne) {
@@ -226,6 +254,9 @@ class Relationship {
                         }
                         return res
                     };
+                }
+                else {
+                    throw new Error('Wrong relation description');
                 }
             }
         } else if(options.toMany) {
@@ -242,13 +273,27 @@ class Relationship {
                         });
                     }
                 }*/
-                if(options.getFilterOne) {
+                if(options.getIdsOne) {
                     this.getListOne = async function (resource) {
                         // await resource.load();
-                        return await resource.context.list(type, {
+                        return resource.context.resources(type, await options.getIdsOne(resource));
+                    };
+                    this.getListFew = async function (resources) {
+                        const res = [];
+                        for(const resource of resources) {
+                            res.push(resource.context.resources(type, await options.getIdsOne(resource)));
+                        }
+                        return res;
+                    };
+                } else if(options.getFilterOne) {
+                    this.getListOne = async function (resource) {
+                        // await resource.load();
+                        return resource.context.list(type, {
                             filter: await options.getFilterOne(resource)
                         });
                     }
+                } else {
+                    throw new Error('Wrong relation description');
                 }
             }
         } else {

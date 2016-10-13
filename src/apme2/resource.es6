@@ -98,9 +98,8 @@ export class Resource {
         }
         return await this.context.api.collections[this.type].removeOne(this.id, this.context);
     }
-    async include(include) {
-        // @todo
-        return new ResourcesMixedList(this.context);
+    async include(includeTree) {
+        return await (new ResourcesTypedList(this.context, this.type, [this])).include(includeTree);
     }
     async checkPermission(operation) {
         if(this.context.privileged) {
@@ -207,6 +206,10 @@ export class AbstractResourcesList {
     push(resource) {
         this.items.push(resource);
     }
+    _clearUnexisting() {
+        this.items = this.items.filter(resource => resource.exists);
+        return this;
+    }
     async include(includeTree) {
         const includedResult = new ResourcesMixedList(this.context);
 
@@ -238,7 +241,7 @@ export class AbstractResourcesList {
                             list
                         });
                     }
-                    const split = includeSet.list.splitByType();
+                    const split = includeSet.list._clearUnexisting().splitByType();
                     for(const type in split) {
                         const typedList = split[type];
                         await typedList.loadRel(relName); // @todo: make it simultaneous
@@ -303,6 +306,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
             resource._attachObject(res[resource.id] || null);
         }
 
+        this._clearUnexisting();
         this.loaded = true;
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
@@ -364,6 +368,7 @@ export class ResourcesMixedList extends AbstractResourcesList {
             promises.push(split[type].load());
         }
         await Promise.all(promises);
+        this._clearUnexisting();
         this.loaded = true;
         /*if(!await this.checkPermission('read')) {
             throw forbiddenError();

@@ -1,5 +1,5 @@
 
-import {Resource, ResourcesMap, ResourceTypedQuery} from './resource';
+import {Resource, ResourcesMap, ResourceTypedQuery, ResourcesTypedList} from './resource';
 
 export class Context {
     constructor(api, {req}) {
@@ -21,8 +21,10 @@ export class Context {
     }
 
     resources(type, ids) {
-        return ids.map(id => this.resource(type, id));
+        return new ResourcesTypedList(this, type, ids.map(id => this.resource(type, id)));
     }
+
+    // resources
 
     list(type, params) {
         return new ResourceTypedQuery(this, type, params);
