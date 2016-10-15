@@ -39,23 +39,29 @@ export class Collection {
         if(options.cache) {
             const cache = options.cache;
             this.loadOne = function(id) {
-                return cache.load(`${type}:o:${id}`, () => (
+                return cache.load(`${type}:o:`, id, () => (
                     this._loadOne(id)
                 ));
             };
             this.loadFew = function(ids) {
-                return cache.mload(ids.map(id => `${type}:o:${ids}`), rest => (
-                    this._loadFew(rest)
-                ));
+                /*const keysMap = {};
+                for(const id of ids) {
+                    keysMap[`${type}:o:${id}`] = id;
+                }
+                console.log('mload>>>', Object.keys(keysMap));*/
+                return cache.mload(`${type}:o:`, ids, rest => {
+                    // console.log(rest.map(cacheKey => keysMap[cacheKey]));
+                    return this._loadFew(rest);
+                });
             };
             this.loadList = async function({filter, page, sort}) {
-                const cacheKey = `${type}:l:${querystring.stringify({filter, sort, page})}`;
-                const ids = await cache.get(cacheKey);
+                const cacheKey = querystring.stringify({filter, sort, page});
+                const ids = await cache.get(`${type}:l:`, cacheKey);
                 if(ids) {
-                    const fromCache = await cache.mget(ids.map(id => `${type}:o:${id}`));
+                    const fromCache = await cache.mget(`${type}:o:`, ids);
                     let list = [];
                     for(const id of ids) {
-                        const value = fromCache[`${type}:o:${id}`];
+                        const value = fromCache[id];
                         if(!value) {
                             list = null;
                             break;
@@ -69,10 +75,10 @@ export class Collection {
                 const list = await this._loadList({filter, page, sort});
                 const few = {};
                 for(const item of list) {
-                    few[`${type}:o:${item.id}`] = item;
+                    few[item.id] = item;
                 }
-                await cache.mset(few);
-                await cache.set(cacheKey, list.map(item => item.id));
+                await cache.mset(`${type}:o:`, few);
+                await cache.set(`${type}:l:`, cacheKey, list.map(item => item.id));
                 return list;
             }
         } else {

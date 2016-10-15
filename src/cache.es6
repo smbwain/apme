@@ -1,59 +1,95 @@
 
 export class Cache {
-    get() {}
-    set() {}
-    remove() {}
-    async mget(keys) {
+    async get() {
+        throw new Error('Abstract method');
+    }
+    async set() {
+        throw new Error('Abstract method');
+    }
+    async remove() {
+        throw new Error('Abstract method');
+    }
+
+    /**
+     * @param {string} prefix
+     * @param {[string]} keys
+     * @returns {object}
+     */
+    async mget(prefix, keys) {
         const few = {};
         for(const key of keys) {
-            const cached = await this.get(key);
+            const cached = await this.get(prefix, key);
             if(cached !== undefined) {
                 few[key] = cached;
             }
         }
         return few;
     }
-    async mset(few) {
+
+    /**
+     * @param {string} prefix
+     * @param {object} few
+     */
+    async mset(prefix, few) {
         for(const key in few) {
-            await this.set(key, few[key]);
+            await this.set(prefix, key, few[key]);
         }
     }
-    async mremove(keys) {
+
+    /**
+     * @param {string} prefix
+     * @param {[string]} keys
+     */
+    async mremove(prefix, keys) {
         for(const key of keys) {
-            await this.remove(key);
+            await this.remove(prefix, key);
         }
-    };
-    async load(key, options, loader) {
+    }
+
+    async load(prefix, key, options, loader) {
         if(!loader) {
             loader = options;
             options = {};
         }
-        let cached = await this.get(key);
+        let cached = await this.get(prefix, key);
         if(cached === undefined) {
             cached = await loader();
-            const setPromise = this.set(key, cached);
+            const setPromise = this.set(prefix, key, cached);
             if(!options.fast) {
                 await setPromise;
             }
         }
         return cached;
     }
-    async mload(keys, options, loader) {
+
+    /**
+     * @param {string} prefix
+     * @param {[string]} keys
+     * @param {object} [options={}]
+     * @param {function} loader
+     * @returns {object}
+     */
+    async mload(prefix, keys, options, loader) {
         if(!loader) {
             loader = options;
             options = {};
         }
-        const few = await this.mget(keys);
-        keys = keys.filter(id => few[id] !== undefined);
+        const few = await this.mget(prefix, keys);
+        keys = keys.filter(key => few[key] === undefined);
 
         if(keys.length) {
             const res = await loader(keys);
-            const setPromise = this.mset(res);
+            for(const key of keys) {
+                if(!(key in res)) {
+                    res[key] = null;
+                }
+            }
+            const setPromise = this.mset(prefix, res);
             if(!options.fast) {
                 await setPromise;
             }
             for(const key in res) {
-                few[key] = res;
+                few[key] = res[key];
             }
         }
 
@@ -77,50 +113,45 @@ export class SimpleMemoryCache extends Cache {
             this._tmr = null;
         }
     }
-    set(key, value) {
-        this._cache[key] = value;
+    set(prefix, key, value) {
+        this._cache[prefix+key] = value;
     }
-    get(key) {
-        return this._cache[key];
+    get(prefix, key) {
+        return this._cache[prefix+key];
     }
-    remove(key) {
-        delete this._cache[key];
+    remove(prefix, key) {
+        delete this._cache[prefix+key];
     }
 }
 
-export function cacheLogMixin(cache) {
-    function msg(...args) {
-        console.log('cache log>>', ...args);
+function msg(...args) {
+    console.log('cache log>>', ...args);
+}
+export class SimpleDebugMemoryCache extends SimpleMemoryCache {
+    async set(prefix, key, value) {
+        await SimpleMemoryCache.prototype.set.call(this, prefix, key, value);
+        msg(`SET "${prefix+key}"`);
     }
-    return {
-        ...cache,
-        async get(key) {
-            const res = await cache.get(key);
-            msg(`GET "${key}": ${res !== undefined ? 'hit' : 'missed'}`);
-            return res;
-        },
-        async set(key, data) {
-            await cache.set(key, data);
-            msg(`SET "${key}"`);
-        },
-        async remove(key) {
-            await cache.remove(key);
-            msg(`REMOVE "${key}"`);
-        },
-        async mget(keys) {
-            const res = await cache.mget(keys);
-            msg(`MGET ${keys.map(key => `"${key}"`).join(',')}: ${Object.keys(res).length}/${keys.length} hits`);
-            return res;
-        },
-        async mset(data) {
-            await cache.mset(data);
-            msg(`MSET ${Object.keys(data).map(key => `"${key}"`).join(',')}`);
-        },
-        async mremove(keys) {
-            await cache.mremove(keys);
-            msg(`MREMOVE ${keys.map(key => `"${key}"`).join(',')}`);
-        },
-        //async load() {},
-        //async mload() {}
-    };
+    async get(prefix, key) {
+        const res = await SimpleMemoryCache.prototype.get.call(this, prefix, key);
+        msg(`GET "${prefix+key}": ${res !== undefined ? 'hit' : 'missed'}`);
+        return res;
+    }
+    async remove(prefix, key) {
+        await SimpleMemoryCache.prototype.remove.call(this, prefix, key);
+        msg(`REMOVE "${prefix+key}"`);
+    }
+    async mget(prefix, keys) {
+        const res = await SimpleMemoryCache.prototype.mget.call(this, prefix, keys);
+        msg(`MGET ${keys.map(key => `"${prefix+key}"`).join(',')}: ${Object.keys(res).length}/${keys.length} hits`);
+        return res;
+    }
+    async mset(prefix, data) {
+        await SimpleMemoryCache.prototype.mset.call(this, prefix, data);
+        msg(`MSET ${Object.keys(data).map(key => `"${prefix+key}"`).join(',')}`);
+    }
+    async mremove(prefix, keys) {
+        await SimpleMemoryCache.prototype.mremove.call(this, prefix, keys);
+        msg(`MREMOVE ${keys.map(key => `"${prefix+key}"`).join(',')}`);
+    }
 }

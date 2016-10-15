@@ -1,12 +1,23 @@
 
 import {forbiddenError} from './errors';
 
+function filterFields(obj, fields) {
+    if(!fields) {
+        return obj;
+    }
+    const res = {};
+    for(const name in fields) {
+        res[name] = obj[name];
+    }
+    return res;
+}
+
 export class Resource {
     constructor(context, type, id, object) {
         this.context = context;
         this.type = type;
         this.id = id;
-        this.object = object;
+        this._object = object;
         this.rels = {};
     }
     setData(data) {
@@ -14,13 +25,22 @@ export class Resource {
         return this;
     }
     _attachObject(object) {
-        this.object = object;
+        this._object = object;
     }
     get loaded() {
-        return this.object !== undefined;
+        return this._object !== undefined;
     }
     get exists() {
-        return !!this.object;
+        if(this._object === undefined) {
+            throw new Error(`Try to read "exists" property of unloaded resource`);
+        }
+        return !!this._object;
+    }
+    get object() {
+        if(this._object === undefined) {
+            throw new Error(`Try to read "object" property of unloaded resource`);
+        }
+        return this._object;
     }
     async load() {
         if(!this.loaded) {
@@ -44,7 +64,7 @@ export class Resource {
         const data = {
             id: this.id,
             type: this.type,
-            attributes: collection.packAttrs(this.object),
+            attributes: filterFields(collection.packAttrs(this.object), fields),
             /*links: {
                 self: urlBuilder(`${this.type}/${this.id}`)
             }*/
@@ -52,6 +72,9 @@ export class Resource {
         if(Object.keys(collection.rels).length) {
             data.relationships = {};
             for(const relName in collection.rels) {
+                if(fields && !fields[relName]) {
+                    continue;
+                }
                 data.relationships[relName] = {
                     links: {
                         self: urlBuilder(`${this.type}/${this.id}/relationships/${relName}`)

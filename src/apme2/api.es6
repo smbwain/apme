@@ -5,7 +5,8 @@ import {Collection} from './collection';
 import {Context} from './context';
 import * as errors from './errors';
 import asyncMW from 'async-mw';
-import {Cache, SimpleMemoryCache, cacheLogMixin} from '../cache';
+import {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from '../cache';
+import querystring from 'querystring';
 
 export function group(arr) {
     const map = {};
@@ -15,7 +16,7 @@ export function group(arr) {
     return map;
 }
 
-export {Cache, SimpleMemoryCache, cacheLogMixin};
+export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache};
 
 export const jsonErrorHandler = errors.jsonErrorHandler;
 
@@ -61,35 +62,9 @@ export class Api {
     expressRouter({url = '/'} = {}) {
         const router = require('express').Router();
 
-        function urlBuilder(path) {
-            return url+path;
+        function urlBuilder(path, params) {
+            return url+path+((params && Object.keys(params).length) ? '?'+querystring.stringify(params) : '');
         }
-
-        /*function packItem(resource, fields) {
-            if(!resource) {
-                return null;
-            }
-            const packed = resource.pack(fields);
-            packed.links = {
-                self: urlBuilder(`${resource.type}/${resource.id}`)
-            };
-        }
-
-        function packCollection(collection, fields) {
-            return {
-                data: collection.items.map(resource => packItem(resource, fields[resource.type])),
-                links: {
-                    // @todo
-                }
-            }
-        }
-
-        function packRef(resource, context, relName) {
-            const packed = resource.packRef();
-            return {
-                data: resource
-            }
-        }*/
 
         router.param('collection', (req, res, next, type) => {
             req.collection = this.collections[type];
@@ -125,11 +100,10 @@ export class Api {
             const included = (await list.include(include)).packItems(fields, urlBuilder);
 
             return {
-                // @todo: links
                 data: list.packItems(fields, urlBuilder),
                 included: included.length ? included : undefined,
                 links: {
-                    self: urlBuilder(`${type}`) // @todo: params
+                    self: urlBuilder(`${type}`, req.query)
                 }
             };
         }));
@@ -150,11 +124,10 @@ export class Api {
             const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
             return {
-                // @todo: links
                 data: resource.pack(fields[type], urlBuilder),
                 included: included.length ? included : undefined,
                 links: {
-                    self: urlBuilder(`${type}/${id}`) // @todo: params
+                    self: urlBuilder(`${type}/${id}`, req.query)
                 }
             };
         }));
@@ -258,8 +231,7 @@ export class Api {
                 const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
                 return {
-                    // @todo: links
-                    data: resource.pack(fields, urlBuilder),
+                    data: resource.pack(fields[resource.type], urlBuilder),
                     included: included.length ? included : undefined,
                     links: {
                         self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
@@ -386,7 +358,7 @@ export class Api {
             } else {
                 const list = await rel.getListOne(mainResource);
                 await list.load();
-                console.log('>>list', list);
+                //console.log('>>list', list);
                 data = list.packRefs();
             }
 
