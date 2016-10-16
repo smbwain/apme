@@ -250,7 +250,6 @@ class Relationship {
                 const type = options.toOne;
                 if (options.getIdOne) {
                     this.getResourceOne = async function (resource) {
-                        // await resource.load();
                         return resource.context.resource(type, await options.getIdOne(resource));
                     };
                     this.getResourceFew = async function (resources) {
@@ -260,8 +259,22 @@ class Relationship {
                         }
                         return res
                     };
-                }
-                else {
+                } else if(options.getFilterOne) {
+                    this.getResourceOne = async function (resource) {
+                        const list = resource.context.list(type, {
+                            filter: await options.getFilterOne(resource)
+                        });
+                        await list.load();
+                        return list.items[0];
+                    };
+                    this.getResourceFew = async function (resources) {
+                        const res = [];
+                        for(const resource of resources) {
+                            res.push(await this.getResourceOne(resource));
+                        }
+                        return res;
+                    };
+                } else {
                     throw new Error('Wrong relation description');
                 }
             }
