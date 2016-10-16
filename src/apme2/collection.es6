@@ -1,6 +1,6 @@
 
 import {methodNotAllowedError} from './errors';
-import querystring from 'querystring';
+import {MD5} from 'object-hash';
 
 export class Collection {
     constructor(api, type, options) {
@@ -55,7 +55,7 @@ export class Collection {
                 });
             };
             this.loadList = async function({filter, page, sort}) {
-                const cacheKey = querystring.stringify({filter, sort, page});
+                const cacheKey = MD5({filter, sort, page});
                 const ids = await cache.get(`${type}:l:`, cacheKey);
                 if(ids) {
                     const fromCache = await cache.mget(`${type}:o:`, ids);
@@ -72,19 +72,28 @@ export class Collection {
                         return list;
                     }
                 }
-                const list = await this._loadList({filter, page, sort});
+                let loaded = await this._loadList({filter, page, sort});
+                if(Array.isArray(loaded)) {
+                    loaded = {items: loaded};
+                }
                 const few = {};
-                for(const item of list) {
+                for(const item of loaded.items) {
                     few[item.id] = item;
                 }
                 await cache.mset(`${type}:o:`, few);
-                await cache.set(`${type}:l:`, cacheKey, list.map(item => item.id));
-                return list;
+                await cache.set(`${type}:l:`, cacheKey, loaded.list.map(item => item.id));
+                return loaded;
             }
         } else {
             this.loadOne = this._loadOne;
             this.loadFew = this._loadFew;
-            this.loadList = this._loadList;
+            this.loadList = async function(params) {
+                let loaded = await this._loadList(params);
+                if(Array.isArray(loaded)) {
+                    loaded = {items: loaded};
+                }
+                return loaded;
+            }
         }
 
         this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);

@@ -101,6 +101,7 @@ export class Api {
 
             return {
                 data: list.packItems(fields, urlBuilder),
+                meta: list.meta,
                 included: included.length ? included : undefined,
                 links: {
                     self: urlBuilder(`${type}`, req.query)

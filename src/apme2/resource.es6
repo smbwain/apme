@@ -450,9 +450,11 @@ export class ResourceTypedQuery extends ResourcesTypedList {
         if(this.loaded) {
             return this;
         }
-        this.items = (await this.context.api.collections[this.type].loadList(this.params)).map(object => {
+        const loaded = await this.context.api.collections[this.type].loadList(this.params);
+        this.items = loaded.items.map(object => {
             return this.context.resource(this.type, object.id, object);
         });
+        this.meta = loaded.meta;
         this.loaded = true;
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
