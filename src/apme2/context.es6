@@ -6,6 +6,7 @@ export class Context {
         this.api = api;
         this.req = req;
         this._loadedMap = new ResourcesMap();
+        this.fields = {};
     }
 
     resource(type, id, object) {

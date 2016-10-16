@@ -294,10 +294,19 @@ class Relationship {
                 } else if(options.getFilterOne) {
                     this.getListOne = async function (resource) {
                         // await resource.load();
-                        return resource.context.list(type, {
+                        const list = resource.context.list(type, {
                             filter: await options.getFilterOne(resource)
                         });
-                    }
+                        await list.load();
+                        return list;
+                    };
+                    this.getListFew = async function (resources) {
+                        const res = [];
+                        for(const resource of resources) {
+                            res.push(await this.getListOne(resource));
+                        }
+                        return res;
+                    };
                 } else {
                     throw new Error('Wrong relation description');
                 }

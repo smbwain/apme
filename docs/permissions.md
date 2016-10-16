@@ -4,8 +4,6 @@
 Any permission description could be boolean value or function which returns boolean.
 Functional description could retrieve params (context, id, object, data, operation).
 
-
-
 readOne(context, resource, op) / readFew(context, resources, op)
 createOne(context, resource, op) / createFew(context, resources, op)
 updateOne(context, resource, op) / updateFew(context, resource, op)

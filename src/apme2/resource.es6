@@ -44,20 +44,26 @@ export class Resource {
     }
     async load() {
         if(!this.loaded) {
-            this._attachObject( (await this.context.api.collections[this.type].loadOne(this.id)) || null);
+            const collection = this.context.api.collections[this.type];
+            this._attachObject( (await collection.loadOne(this.id)) || null);
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
+            }
+            const fields = this.context.fields[this.type];
+            for(const relName in collection.rels) {
+                if(!fields || fields.has(relName)) {
+                    await this._loadRel(relName);
+                }
             }
         }
         return this;
     }
-    async loadRel(relName) {
-        const rel = this.context.api.collections[this.type].rels[relName];
-        if(rel.toOne) {
-            this.rels[relName] = await rel.getResourceOne(this);
-        } else {
-            this.rels[relName] = await rel.getListOne(this);
+    async _loadRel(relName) {
+        if(this.rels[relName]) {
+            return;
         }
+        const rel = this.context.api.collections[this.type].rels[relName];
+        this.rels[relName] = await rel.getOne(this);
     }
     pack(fields, urlBuilder) {
         const collection = this.context.api.collections[this.type];
@@ -267,7 +273,7 @@ export class AbstractResourcesList {
                     const split = includeSet.list._clearUnexisting().splitByType();
                     for(const type in split) {
                         const typedList = split[type];
-                        await typedList.loadRel(relName); // @todo: make it simultaneous
+                        // await typedList._loadRel(relName); // @todo: make it simultaneous
                         for(const item of typedList.items) {
                             const itemRel = item.rels[relName];
                             for(const resource of (itemRel instanceof Resource) ? [itemRel] : itemRel.items) {
@@ -307,6 +313,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
     constructor(context, type, items = []) {
         super(context, items);
         this.type = type;
+        this._loadedRels = new Set();
     }
     push(resource) {
         if(resource.type != this.type) {
@@ -334,12 +341,28 @@ export class ResourcesTypedList extends AbstractResourcesList {
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
         }
+
+        await this._loadRels();
+
         return this;
     }
-    async loadRel(relName) {
+    async _loadRels() {
+        // await this.load();
+        const fields = this.context.fields[this.type];
+        for(const relName in this.context.api.collections[this.type].rels) {
+            if(!fields || fields.has(relName)) {
+                await this._loadRel(relName);
+            }
+        }
+    }
+    async _loadRel(relName) {
+        if(this._loadedRels.has(relName)) {
+            return;
+        }
         (await this.context.api.collections[this.type].rels[relName].getFew(this.items)).forEach((related, i) => {
             this.items[i].rels[relName] = related;
         });
+        this._loadedRels.add(relName);
     }
     splitByType() {
         return {
@@ -434,6 +457,9 @@ export class ResourceTypedQuery extends ResourcesTypedList {
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
         }
+
+        await this._loadRels();
+
         return this;
     }
     async checkPermission(operation) {

@@ -15,11 +15,21 @@ const users = [{
 }, {
     id: '2',
     name: 'Piter'
+}, {
+    id: '3',
+    name: 'Author 1'
+}, {
+    id: '4',
+    name: 'Author 2'
+}, {
+    id: '5',
+    name: 'Author 3'
 }];
 
 const books = [{
     id: 'good-parts',
     name: 'Good parts',
+    authors: [3, 5],
     ownerId: '1'
 }, {
     id: 'better-parts',
@@ -28,7 +38,8 @@ const books = [{
 }, {
     id: 'foo',
     name: 'Foo',
-    ownerId: '1'
+    ownerId: '1',
+    authors: [4]
 }];
 
 
@@ -78,6 +89,10 @@ describe('rels', () => {
                 owner: {
                     toOne: 'users',
                     getIdOne: resource => resource.object.ownerId
+                },
+                authors: {
+                    toMany: 'users',
+                    getIdsOne: resource => resource.object.authors || []
                 }
             }
         });
@@ -124,6 +139,10 @@ describe('rels', () => {
                 },
                 "relationships": {
                     "ownedBooks": {
+                        "data": [{
+                            "type": "books",
+                            "id": "better-parts"
+                        }],
                         "links": {
                             "self": "/api/users/2/relationships/ownedBooks"
                         }
@@ -163,7 +182,26 @@ describe('rels', () => {
                     "name": "Good parts"
                 },
                 "relationships": {
+                    "authors": {
+                        "data": [
+                            {
+                                "id": 3,
+                                "type": "users"
+                            },
+                            {
+                                "id": 5,
+                                "type": "users"
+                            }
+                        ],
+                        "links": {
+                            "self": "/api/books/good-parts/relationships/authors"
+                        }
+                    },
                     "owner": {
+                        "data": {
+                            "id": "1",
+                            "type": "users"
+                        },
                         "links": {
                             "self": "/api/books/good-parts/relationships/owner"
                         }
@@ -176,7 +214,22 @@ describe('rels', () => {
                     "name": "Foo"
                 },
                 "relationships": {
+                    "authors": {
+                        "data": [
+                            {
+                                "id": 4,
+                                "type": "users"
+                            }
+                        ],
+                        "links": {
+                            "self": "/api/books/foo/relationships/authors"
+                        }
+                    },
                     "owner": {
+                        "data": {
+                            "id": "1",
+                            "type": "users"
+                        },
                         "links": {
                             "self": "/api/books/foo/relationships/owner"
                         }
@@ -199,6 +252,21 @@ describe('rels', () => {
                     name: 'Good parts'
                 },
                 relationships: {
+                    "authors": {
+                        "data": [
+                            {
+                                "id": 3,
+                                "type": "users"
+                            },
+                            {
+                                "id": 5,
+                                "type": "users"
+                            }
+                        ],
+                        "links": {
+                            "self": "/api/books/good-parts/relationships/authors"
+                        }
+                    },
                     owner: {
                         data: {
                             type: 'users',
@@ -216,6 +284,12 @@ describe('rels', () => {
                     name: 'Better parts'
                 },
                 relationships: {
+                    "authors": {
+                        "data": [],
+                        "links": {
+                            "self": "/api/books/better-parts/relationships/authors"
+                        }
+                    },
                     owner: {
                         data: {
                             type: 'users',
@@ -233,6 +307,17 @@ describe('rels', () => {
                     name: 'Foo'
                 },
                 relationships: {
+                    "authors": {
+                        "data": [
+                            {
+                                "id": 4,
+                                "type": "users"
+                            }
+                        ],
+                        "links": {
+                            "self": "/api/books/foo/relationships/authors"
+                        }
+                    },
                     owner: {
                         data: {
                             type: 'users',
@@ -252,6 +337,16 @@ describe('rels', () => {
                 },
                 "relationships": {
                     "ownedBooks": {
+                        "data": [
+                            {
+                                "id": "good-parts",
+                                "type": "books"
+                            },
+                            {
+                                "id": "foo",
+                                "type": "books"
+                            }
+                        ],
                         "links": {
                             "self": "/api/users/1/relationships/ownedBooks"
                         }
@@ -265,6 +360,12 @@ describe('rels', () => {
                 },
                 "relationships": {
                     "ownedBooks": {
+                        "data": [
+                            {
+                                "id": "better-parts",
+                                "type": "books"
+                            }
+                        ],
                         "links": {
                             "self": "/api/users/2/relationships/ownedBooks"
                         }
