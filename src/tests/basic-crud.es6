@@ -56,6 +56,7 @@ describe('basic crud', () => {
                 };
                 return users[index];
             },
+            passId: true,
             createOne: async (id, data) => {
                 users.push({id, ...data});
                 return data;

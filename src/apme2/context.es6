@@ -1,5 +1,5 @@
 
-import {Resource, ResourcesMap, ResourceTypedQuery, ResourcesTypedList} from './resource';
+import {Resource, ResourcesMap, AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resource';
 
 export class Context {
     constructor(api, {req}) {
@@ -10,6 +10,9 @@ export class Context {
     }
 
     resource(type, id, object) {
+        if(!id) {
+            return new Resource(this, type, null);
+        }
         let resource = this._loadedMap.get(type, id);
         if(!resource) {
             resource = new Resource(this, type, id);
@@ -29,6 +32,18 @@ export class Context {
 
     list(type, params) {
         return new ResourceTypedQuery(this, type, params);
+    }
+
+    packRefData(value) {
+        if(value instanceof Resource) {
+            return value.packRef();
+        } else if(value instanceof AbstractResourcesList) {
+            return value.items.map(resource => resource.packRef());
+        } else if(value === null) {
+            return null;
+        } else {
+            throw new Error();
+        }
     }
 
     /**

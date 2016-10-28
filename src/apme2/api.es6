@@ -3,7 +3,7 @@ import Joi from 'joi';
 
 import {Collection} from './collection';
 import {Context} from './context';
-import * as errors from './errors';
+import {jsonErrorHandler, badRequestError, notFoundError} from './errors';
 import asyncMW from 'async-mw';
 import {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from '../cache';
 import querystring from 'querystring';
@@ -16,9 +16,7 @@ export function group(arr) {
     return map;
 }
 
-export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache};
-
-export const jsonErrorHandler = errors.jsonErrorHandler;
+export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache, jsonErrorHandler};
 
 const schemas = {};
 {
@@ -70,7 +68,7 @@ export class Api {
             req.collection = this.collections[type];
             req.type = type;
             if (!req.collection) {
-                next(errors.notFoundError('No collection found'));
+                next(notFoundError('No collection found'));
                 return;
             }
             next();
@@ -92,7 +90,7 @@ export class Api {
 
             const fields = collection.parseFields(req.query.fields);
             const filter = req.query.filter;
-            const include = req.query.include && req.collection.parseInclude(req.query.include);
+            const include = req.collection.parseInclude(req.query.include);
             const sort = req.collection.parseSort(req.query.sort);
             const page = req.query.page;
 
@@ -116,11 +114,11 @@ export class Api {
 
             const resource = await context.resource(type, id).load();
             if(!resource.exists) {
-                throw errors.notFoundError();
+                throw notFoundError();
             }
 
             const fields = collection.parseFields(req.query.fields);
-            const include = req.query.include && req.collection.parseInclude(req.query.include);
+            const include = req.collection.parseInclude(req.query.include);
 
             const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
@@ -153,21 +151,24 @@ export class Api {
                     throw badRequestError('Wrong "type" passed in document');
                 }
 
+                let id = body.data.id;
+
                 // fill/check id
                 if(patch) {
-                    if(body.data.id && body.data.id != req.params.id) {
-                        throw badRequestError('Wrong "id" passed in document');
+                    if(id) {
+                        if (id != req.id) {
+                            throw badRequestError('Wrong "id" passed in document');
+                        }
                     } else {
-                        body.data.id = req.id;
+                        id = req.id;
                     }
                 } else {
-                    if(body.data.id) {
-                        // @todo
-                        // if(!context.hasPermission('passId', resource)) {
-                        //    throw errors.forbiddenError(`Passing id is permitted`);
-                        // }
+                    if(id) {
+                        if(!collection.passId || (typeof collection.passId == 'function' && !(await collection.passId(context, id)))) {
+                            throw badRequestError('Passing id is not allowed');
+                        }
                     } else {
-                        body.data.id = await collection.generateID();
+                        id = await collection.generateId();
                     }
                 }
 
@@ -213,21 +214,37 @@ export class Api {
                     }, context);
                 }*/
 
-                const resource = context.resource(req.type, body.data.id);
+                const resource = context.resource(req.type, id);
+                const data = collection.unpackAttrs(body.data.attributes || {});
+                const passedRels = body.data.relationships || {};
+                for(const relName in passedRels) {
+                    const rel = collection.rels[relName];
+                    if(!rel) {
+                        throw badRequestError('Bad relation name')
+                    }
+                    const passedRelData = passedRels[relName].data;
+                    let relValue;
+                    if(Array.isArray(passedRelData)) {
+                        relValue = passedRelData.map(data => context.resource(data.type, data.id));
+                    } else {
+                        relValue = passedRelData ? context.resource(passedRelData.type, passedRelData.id) : null;
+                    }
+                    rel.setData(data, relValue);
+                }
 
                 if(patch) {
-                    resource.setData(req.collection.unpackForUpdate(body.data));
+                    resource.setData(data);
                     await resource.update();
                     if(!resource.exists) {
-                        throw errors.notFoundError();
+                        throw notFoundError();
                     }
                 } else {
-                    resource.setData(req.collection.unpackForCreate(body.data));
+                    resource.setData(data);
                     await resource.create();
                 }
 
                 const fields = collection.parseFields(req.query.fields);
-                const include = req.query.include && req.collection.parseInclude(req.query.include);
+                const include = req.collection.parseInclude(req.query.include);
 
                 const included = (await resource.include(include)).packItems(fields, urlBuilder);
 
@@ -248,7 +265,7 @@ export class Api {
             const context = this.context({req});
 
             if(!await context.resource(req.type, req.id).remove()) {
-                throw errors.notFoundError();
+                throw notFoundError();
             }
 
             res.status(204).send();
@@ -264,12 +281,12 @@ export class Api {
 
             const rel = collection.rels[relName];
             if(!rel) {
-                throw errors.notFoundError('No relation with such name');
+                throw notFoundError('No relation with such name');
             }
 
             const mainResource = await context.resource(type, id).load();
             if(!mainResource.exists) {
-                throw errors.notFoundError();
+                throw notFoundError();
             }
 
             const fields = collection.parseFields(req.query.fields);
@@ -344,15 +361,15 @@ export class Api {
 
             const rel = collection.rels[relName];
             if(!rel) {
-                throw errors.notFoundError('No relation with such name');
+                throw notFoundError('No relation with such name');
             }
 
             const mainResource = await context.resource(type, id).load();
             if(!mainResource.exists) {
-                throw errors.notFoundError();
+                throw notFoundError();
             }
 
-            let data;
+            /*let data;
             if(rel.toOne) {
                 const resource = await rel.getResourceOne(mainResource);
                 data = resource ? resource.packRef() : null
@@ -361,10 +378,10 @@ export class Api {
                 await list.load();
                 //console.log('>>list', list);
                 data = list.packRefs();
-            }
+            }*/
 
             return {
-                data,
+                data: context.packRefData(await rel.getOne(mainResource)),
                 links: {
                     self: urlBuilder(`${type}/${id}/relationships/${relName}`),
                     related: urlBuilder(`${type}/${id}/${relName}`)

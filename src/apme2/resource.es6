@@ -49,17 +49,21 @@ export class Resource {
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
             }
-            const fields = this.context.fields[this.type];
-            for(const relName in collection.rels) {
-                if(!fields || fields.has(relName)) {
-                    await this._loadRel(relName);
-                }
-            }
+            await this._loadRels();
         }
         return this;
     }
+    async _loadRels() {
+        const collection = this.context.api.collections[this.type];
+        const fields = this.context.fields[this.type];
+        for(const relName in collection.rels) {
+            if(!fields || fields.has(relName)) {
+                await this._loadRel(relName);
+            }
+        }
+    }
     async _loadRel(relName) {
-        if(this.rels[relName]) {
+        if(this.rels[relName] !== undefined) {
             return;
         }
         const rel = this.context.api.collections[this.type].rels[relName];
@@ -82,15 +86,16 @@ export class Resource {
                     continue;
                 }
                 data.relationships[relName] = {
+                    data: this.context.packRefData(this.rels[relName]),
                     links: {
                         self: urlBuilder(`${this.type}/${this.id}/relationships/${relName}`)
                     }
                 };
-                if(this.rels[relName] instanceof Resource) {
+                /*if(this.rels[relName] instanceof Resource) {
                     data.relationships[relName].data = this.rels[relName].packRef();
                 } else if (this.rels[relName] instanceof AbstractResourcesList) {
                     data.relationships[relName].data = this.rels[relName].packRefs();
-                }
+                }*/
             }
         }
         return data;
@@ -109,6 +114,7 @@ export class Resource {
             await this.context.api.collections[this.type].updateOne(this.id, this.data, this.context)
         );
         delete this.data;
+        await this._loadRels();
         return this;
     }
     async create() {
@@ -118,7 +124,12 @@ export class Resource {
         this._attachObject(
             await this.context.api.collections[this.type].createOne(this.id, this.data, this.context)
         );
+        if(!this.id) {
+            this.id = this.context.api.collections[this.type].getId(this._object);
+            this.context._loadedMap.add(this); // @todo: take off in some event
+        }
         delete this.data;
+        await this._loadRels();
         return this;
     }
     async remove() {
@@ -229,9 +240,6 @@ export class AbstractResourcesList {
     packItems(fields = {}, urlBuilder) {
         return this.items.map(resource => resource.pack(fields[resource.type], urlBuilder));
     }
-    packRefs() {
-        return this.items.map(resource => resource.packRef());
-    }
     push(resource) {
         this.items.push(resource);
     }
@@ -276,6 +284,9 @@ export class AbstractResourcesList {
                         // await typedList._loadRel(relName); // @todo: make it simultaneous
                         for(const item of typedList.items) {
                             const itemRel = item.rels[relName];
+                            if(itemRel === null) {
+                                continue;
+                            }
                             for(const resource of (itemRel instanceof Resource) ? [itemRel] : itemRel.items) {
                                 if(list) {
                                     list.push(resource); // @todo: what about unique
@@ -467,5 +478,8 @@ export class ResourceTypedQuery extends ResourcesTypedList {
     async checkPermission(operation) {
         await this.load();
         return await ResourcesTypedList.prototype.checkPermission.call(this, operation);
+    }
+    async clearCache() {
+        await this.context.api.collections[this.type].removeListCache(this.params);
     }
 }

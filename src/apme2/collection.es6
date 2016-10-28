@@ -1,6 +1,7 @@
 
-import {methodNotAllowedError} from './errors';
+import {methodNotAllowedError, badRequestError} from './errors';
 import {MD5} from 'object-hash';
+import {v4 as uuid} from 'uuid';
 
 export class Collection {
     constructor(api, type, options) {
@@ -32,7 +33,13 @@ export class Collection {
 
         // load list
         if(options.loadList) {
-            this._loadList = options.loadList;
+            this._loadList = async function(params) {
+                let loaded = await options.loadList(params);
+                if(Array.isArray(loaded)) {
+                    loaded = {items: loaded};
+                }
+                return loaded;
+            };
         }
 
         // cache
@@ -56,56 +63,79 @@ export class Collection {
             };
             this.loadList = async function({filter, page, sort}) {
                 const cacheKey = MD5({filter, sort, page});
-                const ids = await cache.get(`${type}:l:`, cacheKey);
-                if(ids) {
-                    const fromCache = await cache.mget(`${type}:o:`, ids);
-                    let list = [];
-                    for(const id of ids) {
+                const loadedFromCache = await cache.get(`${type}:l:`, cacheKey);
+                if(loadedFromCache) {
+                    const fromCache = await cache.mget(`${type}:o:`, loadedFromCache.ids);
+                    let items = [];
+                    for(const id of loadedFromCache.ids) {
                         const value = fromCache[id];
                         if(!value) {
-                            list = null;
+                            items = null;
                             break;
                         }
-                        list.push(value);
+                        items.push(value);
                     }
-                    if(list) {
-                        return list;
+                    if(items) {
+                        return {
+                            items,
+                            meta: loadedFromCache.meta
+                        };
                     }
                 }
-                let loaded = await this._loadList({filter, page, sort});
-                if(Array.isArray(loaded)) {
-                    loaded = {items: loaded};
-                }
+                const loaded = await this._loadList({filter, page, sort});
                 const few = {};
                 for(const item of loaded.items) {
                     few[item.id] = item;
                 }
                 await cache.mset(`${type}:o:`, few);
-                await cache.set(`${type}:l:`, cacheKey, loaded.list.map(item => item.id));
+                await cache.set(`${type}:l:`, cacheKey, {
+                    meta: loaded.meta,
+                    ids: loaded.items.map(item => item.id)
+                });
                 return loaded;
-            }
+            };
+            this.removeObjectCache = async id => {
+                return cache.remove(`${type}:o:`, id);
+            };
+            this.removeListCache = ({filter, sort, page}) => {
+                const cacheKey = MD5({filter, sort, page});
+                return cache.remove(`${type}:l:`, cacheKey);
+            };
         } else {
             this.loadOne = this._loadOne;
             this.loadFew = this._loadFew;
-            this.loadList = async function(params) {
-                let loaded = await this._loadList(params);
-                if(Array.isArray(loaded)) {
-                    loaded = {items: loaded};
-                }
-                return loaded;
-            }
+            this.loadList = this._loadList;
+            this.removeObjectCache = () => {};
+            this.removeListCache = () => {};
         }
 
         this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
-        this.updateOne = options.updateOne || function() {
+        this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
+        this.updateOne = options.updateOne ? async (id, data, context) => {
+            const object = await options.updateOne(id, data, context);
+            await this.removeObjectCache(id);
+            return object;
+        } : function() {
             throw new Error('Method not allowed');
         };
-        this.createOne = options.createOne || function() {
+        this.createOne = options.createOne ? async (id, data, context) => {
+            const object = await options.createOne(id, data, context);
+            await this.removeObjectCache(id);
+            return object;
+        } : function() {
             throw new Error('Method not allowed');
         };
-        this.removeOne = options.removeOne || function() {
+        this.removeOne = options.removeOne ? async (id, context) => {
+            const object = await options.removeOne(id, context);
+            await this.removeObjectCache(id);
+            return object;
+        } : function() {
             throw new Error('Method not allowed');
         };
+
+        this.generateId = options.generateId || (() => uuid());
+        this.getId = options.getId || (object => object.id);
+        this.passId = options.passId;
 
         // perms
         function wrapPerm(perms, names) {
@@ -149,6 +179,8 @@ export class Collection {
         for(const relName in options.rels || {}) {
             this.rels[relName] = new Relationship(this, relName, options.rels[relName]);
         }
+
+        this.defaultInclude = options.defaultInclude;
 
         // (context, data, oldData, operation)
 
@@ -220,6 +252,14 @@ export class Collection {
     }
 
     parseInclude(includeString) {
+        if(!includeString) {
+            includeString = this.defaultInclude;
+        }
+
+        if(!includeString) {
+            return null;
+        }
+
         // @todo: validate it
         const obj = {};
         function bld(curObj, path, i) {
@@ -233,24 +273,11 @@ export class Collection {
         }
         return obj;
     }
-
-    unpackForUpdate(data) {
-        return {
-            id: data.id,
-            ...data.attributes
-        };
-    }
-
-    unpackForCreate(data) {
-        return {
-            id: data.id,
-            ...data.attributes
-        };
-    }
 }
 
 class Relationship {
     constructor(collection, name, options) {
+        this.name = name;
         if(options.toOne) {
             this.toOne = true;
             if(options.toOne == '*') {
@@ -259,14 +286,15 @@ class Relationship {
                 const type = options.toOne;
                 if (options.getIdOne) {
                     this.getResourceOne = async function (resource) {
-                        return resource.context.resource(type, await options.getIdOne(resource));
+                        const id = await options.getIdOne(resource);
+                        return id ? resource.context.resource(type, id) : null;
                     };
                     this.getResourceFew = async function (resources) {
                         const res = Array(resources.length);
                         for(let i = resources.length-1; i>=0; i--) {
-                            res[i] = resources[i].context.resource(type, await options.getIdOne(resources[i]));
+                            res[i] = await this.getResourceOne(resources[i]);
                         }
-                        return res
+                        return res;
                     };
                 } else if(options.getFilterOne) {
                     this.getResourceOne = async function (resource) {
@@ -274,7 +302,7 @@ class Relationship {
                             filter: await options.getFilterOne(resource)
                         });
                         await list.load();
-                        return list.items[0];
+                        return list.items[0] || null;
                     };
                     this.getResourceFew = async function (resources) {
                         const res = [];
@@ -285,6 +313,17 @@ class Relationship {
                     };
                 } else {
                     throw new Error('Wrong relation description');
+                }
+                if(options.setIdOne) {
+                    this.setData = (data, relValue) => {
+                        if(Array.isArray(relValue)) {
+                            throw badRequestError(`Relation "${this.name}" is toOne`);
+                        }
+                        if(relValue.type != type) {
+                            throw badRequestError(`Relation "${this.name}" type error`);
+                        }
+                        options.setIdOne(data, relValue ? relValue.id : null);
+                    };
                 }
             }
         } else if(options.toMany) {
@@ -332,6 +371,17 @@ class Relationship {
                 } else {
                     throw new Error('Wrong relation description');
                 }
+                if(options.setIdsOne) {
+                    this.setData = (data, relValue) => {
+                        if(!Array.isArray(relValue)) {
+                            throw badRequestError(`Relation "${this.name}" is toMany`);
+                        }
+                        if(relValue.some(resource => resource.type != type)) {
+                            throw badRequestError(`Relation "${this.name}" type error`);
+                        }
+                        options.setIdsOne(data, relValue.map(resource => resource.id));
+                    };
+                }
             }
         } else {
             throw new Error('toOne or toMany should be specified');
@@ -351,4 +401,25 @@ class Relationship {
             return this.getListFew(resources);
         }
     }
+    /*setData(data, relValue) {
+        if(this.toOne) {
+            if(Array.isArray(relValue)) {
+                throw badRequestError(`Relation "${this.name}" is toOne`);
+            }
+            if(this.setIdOne) {
+                this.setIdOne(data, relValue ? relValue.id : null);
+            } else {
+                throw badRequestError(`Relation ${this.name} is readOnly`);
+            }
+        } else {
+            if(!Array.isArray(relValue)) {
+                throw badRequestError(`Relation "${this.name}" is toMany`);
+            }
+            if(this.setIdsOne) {
+                this.setIdsOne(data, relValue.map(resource => resource.id));
+            } else {
+                throw badRequestError(`Relation ${this.name} is readOnly`);
+            }
+        }
+    }*/
 }

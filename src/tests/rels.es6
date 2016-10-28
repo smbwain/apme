@@ -40,6 +40,9 @@ const books = [{
     name: 'Foo',
     ownerId: '1',
     authors: [4]
+}, {
+    id: 'one-more-book',
+    name: 'One more book'
 }];
 
 
@@ -328,6 +331,26 @@ describe('rels', () => {
                         }
                     }
                 }
+            }, {
+                "attributes": {
+                    "name": "One more book"
+                },
+                "id": "one-more-book",
+                "relationships": {
+                    "authors": {
+                        "data": [],
+                        "links": {
+                            "self": "/api/books/one-more-book/relationships/authors"
+                        }
+                    },
+                    "owner": {
+                        "data": null,
+                        "links": {
+                            "self": "/api/books/one-more-book/relationships/owner"
+                        }
+                    }
+                },
+                "type": "books"
             }],
             "included": [{
                 "id": "1",
