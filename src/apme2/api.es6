@@ -215,7 +215,7 @@ export class Api {
                 }*/
 
                 const resource = context.resource(req.type, id);
-                const data = collection.unpackAttrs(body.data.attributes || {});
+                const data = collection.unpackAttrs(body.data.attributes || {}, patch);
                 const passedRels = body.data.relationships || {};
                 for(const relName in passedRels) {
                     const rel = collection.rels[relName];

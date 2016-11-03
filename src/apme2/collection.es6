@@ -2,6 +2,7 @@
 import {methodNotAllowedError, badRequestError} from './errors';
 import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
+import {ResourcesTypedList} from './resource';
 
 export class Collection {
     constructor(api, type, options) {
@@ -109,8 +110,42 @@ export class Collection {
             this.removeListCache = () => {};
         }
 
-        this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
-        this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
+        if(options.fields) {
+            const setters = {};
+            const getters = {};
+            for(const name in options.fields) {
+                const d = options.fields[name];
+
+                const setter = d.set || ((obj, x) => {
+                    obj[name] = x;
+                });
+                setters[name] = !d.joi ? setter : (obj, x) => {
+                    const validation = d.joi.validate(x);
+                    if(validation.error) {
+                        throw validation.error;
+                    }
+                    setter(obj, validation.value);
+                };
+
+                getters[name] = d.get || (obj => obj[name]);
+            }
+            this.packAttrs = (object) => {
+                const res = {};
+                for(const name in getters) {
+                    res[name] = getters[name](object);
+                }
+                return res;
+            };
+            this.unpackAttrs = ({id, ...rest}, patch) => {
+                /*if(patch) {
+                    for()
+                }*/
+                throw new Error('Not implemented');
+            };
+        } else {
+            this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
+            this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
+        }
         this.updateOne = options.updateOne ? async (id, data, context) => {
             const object = await options.updateOne(id, data, context);
             await this.removeObjectCache(id);
@@ -358,6 +393,23 @@ class Relationship {
                         const list = resource.context.list(type, {
                             filter: await options.getFilterOne(resource)
                         });
+                        await list.load();
+                        return list;
+                    };
+                    this.getListFew = async function (resources) {
+                        const res = [];
+                        for(const resource of resources) {
+                            res.push(await this.getListOne(resource));
+                        }
+                        return res;
+                    };
+                } else if(options.loadObjectsOne) {
+                    this.getListOne = async function (resource) {
+                        const list = new ResourcesTypedList(
+                            resource.context,
+                            type,
+                            (await options.loadObjectsOne(resource)).map(data => resource.context.resource(type, data.id, data))
+                        );
                         await list.load();
                         return list;
                     };

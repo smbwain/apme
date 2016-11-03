@@ -18,7 +18,7 @@ export class Resource {
         this.type = type;
         this.id = id;
         this._object = object;
-        this.rels = {};
+        this._rels = null;
     }
     setData(data) {
         this.data = data;
@@ -28,7 +28,13 @@ export class Resource {
         this._object = object;
     }
     get loaded() {
+        return this._object !== undefined /*&& !!this._rels*/;
+    }
+    get loadedObject() {
         return this._object !== undefined;
+    }
+    get loadedRels() {
+        return !!this._rels;
     }
     get exists() {
         if(this._object === undefined) {
@@ -42,13 +48,21 @@ export class Resource {
         }
         return this._object;
     }
+    get rels() {
+        if(this._rels === undefined) {
+            throw new Error(`Try to read "rels" property of unloaded resource`);
+        }
+        return this._rels;
+    }
     async load() {
-        if(!this.loaded) {
+        if(this._object === undefined) {
             const collection = this.context.api.collections[this.type];
             this._attachObject( (await collection.loadOne(this.id)) || null);
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
             }
+        }
+        if(!this._rels) {
             await this._loadRels();
         }
         return this;
@@ -56,18 +70,13 @@ export class Resource {
     async _loadRels() {
         const collection = this.context.api.collections[this.type];
         const fields = this.context.fields[this.type];
+        this._rels = {};
         for(const relName in collection.rels) {
             if(!fields || fields.has(relName)) {
-                await this._loadRel(relName);
+                const rel = this.context.api.collections[this.type].rels[relName];
+                this._rels[relName] = await rel.getOne(this);
             }
         }
-    }
-    async _loadRel(relName) {
-        if(this.rels[relName] !== undefined) {
-            return;
-        }
-        const rel = this.context.api.collections[this.type].rels[relName];
-        this.rels[relName] = await rel.getOne(this);
     }
     pack(fields, urlBuilder) {
         const collection = this.context.api.collections[this.type];
@@ -85,8 +94,13 @@ export class Resource {
                 if(fields && !fields[relName]) {
                     continue;
                 }
+                const relData = this.rels[relName];
+                if(!relData) {
+                    console.log(this);
+                    throw new Error(`No relationship data ${this.type}:${relName}`);
+                }
                 data.relationships[relName] = {
-                    data: this.context.packRefData(this.rels[relName]),
+                    data: this.context.packRefData(relData),
                     links: {
                         self: urlBuilder(`${this.type}/${this.id}/relationships/${relName}`)
                     }
@@ -324,7 +338,6 @@ export class ResourcesTypedList extends AbstractResourcesList {
     constructor(context, type, items = []) {
         super(context, items);
         this.type = type;
-        this._loadedRels = new Set();
     }
     push(resource) {
         if(resource.type != this.type) {
@@ -337,43 +350,38 @@ export class ResourcesTypedList extends AbstractResourcesList {
             return this;
         }
 
-        const toLoad = this.items.filter(item => !item.loaded);
-        if(!toLoad.length) {
-            return this;
+        const toLoad = this.items.filter(item => !item.loadedObject);
+        if(toLoad.length) {
+            const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id));
+            for(const resource of toLoad) {
+                resource._attachObject(res[resource.id] || null);
+            }
+            this._clearUnexisting();
         }
 
-        const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id));
-        for(const resource of toLoad) {
-            resource._attachObject(res[resource.id] || null);
-        }
-
-        this._clearUnexisting();
-        this.loaded = true;
         if(!await this.checkPermission('read')) {
             throw forbiddenError();
         }
 
         await this._loadRels();
 
+        this.loaded = true;
+
         return this;
     }
     async _loadRels() {
-        // await this.load();
+        const items = this.items.filter(item => !item.loadedRels);
         const fields = this.context.fields[this.type];
+        for(const item of items) {
+            item._rels = {};
+        }
         for(const relName in this.context.api.collections[this.type].rels) {
             if(!fields || fields.has(relName)) {
-                await this._loadRel(relName);
+                (await this.context.api.collections[this.type].rels[relName].getFew(items)).forEach((related, i) => {
+                    items[i]._rels[relName] = related;
+                });
             }
         }
-    }
-    async _loadRel(relName) {
-        if(this._loadedRels.has(relName)) {
-            return;
-        }
-        (await this.context.api.collections[this.type].rels[relName].getFew(this.items)).forEach((related, i) => {
-            this.items[i].rels[relName] = related;
-        });
-        this._loadedRels.add(relName);
     }
     splitByType() {
         return {
