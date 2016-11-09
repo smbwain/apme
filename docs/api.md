@@ -1,5 +1,5 @@
-API
-===
+API documentation
+=================
 
 Api
 ---
@@ -11,4 +11,4 @@ Api
     
 * {object} __options__
 
-    Object with options. Default = {}.
+    [Options](define/options.md). Default = {}.

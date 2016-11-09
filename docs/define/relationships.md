@@ -13,7 +13,7 @@ Relation options
     ___Typed___ relationship could join record with another record(s) of __some predefined type__.
     E.g. type _books_ has relationship _owner_. Owner always has type _users_.
     ___Untyped___ relationship could join record with another record(s) of __different types__.
-    E.g. type _users_ has relationship _ownedObjects_. Owned object could have type _book_, _car_ or _laptop_.
+    E.g. type _users_ has relationship _ownedObjects_. Owned object could be _book_, _car_ or _laptop_.
     
 Depending on is a relationship _toOne_ or _toMany_ and is it _typed_ or _untyped_,
 you could use different options for this relationship.

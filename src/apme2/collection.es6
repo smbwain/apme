@@ -2,6 +2,7 @@
 import {methodNotAllowedError, badRequestError} from './errors';
 import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
+import {ResourcesTypedList} from './resource';
 
 export class Collection {
     constructor(api, type, options) {
@@ -12,17 +13,17 @@ export class Collection {
         if(options.loadOne) {
             this._loadOne = options.loadOne;
         } else if(options.loadFew) {
-            this._loadOne = async id => ((await options.loadFew([id]))[id]);
+            this._loadOne = async (id, context) => ((await options.loadFew([id], context))[id]);
         }
 
         // load few
         if(options.loadFew) {
             this._loadFew = options.loadFew;
         } else if(options.loadOne) {
-            this._loadFew = async ids => {
+            this._loadFew = async (ids, context) => {
                 const res = {};
                 for(const id of ids) {
-                    const obj = await options.loadOne(id);
+                    const obj = await options.loadOne(id, context);
                     if(obj) {
                         res[id] = obj;
                     }
@@ -33,8 +34,8 @@ export class Collection {
 
         // load list
         if(options.loadList) {
-            this._loadList = async function(params) {
-                let loaded = await options.loadList(params);
+            this._loadList = async function(params, context) {
+                let loaded = await options.loadList(params, context);
                 if(Array.isArray(loaded)) {
                     loaded = {items: loaded};
                 }
@@ -45,12 +46,12 @@ export class Collection {
         // cache
         if(options.cache) {
             const cache = options.cache;
-            this.loadOne = function(id) {
+            this.loadOne = function(id, context) {
                 return cache.load(`${type}:o:`, id, () => (
-                    this._loadOne(id)
+                    this._loadOne(id, context)
                 ));
             };
-            this.loadFew = function(ids) {
+            this.loadFew = function(ids, context) {
                 /*const keysMap = {};
                 for(const id of ids) {
                     keysMap[`${type}:o:${id}`] = id;
@@ -58,10 +59,10 @@ export class Collection {
                 console.log('mload>>>', Object.keys(keysMap));*/
                 return cache.mload(`${type}:o:`, ids, rest => {
                     // console.log(rest.map(cacheKey => keysMap[cacheKey]));
-                    return this._loadFew(rest);
+                    return this._loadFew(rest, context);
                 });
             };
-            this.loadList = async function({filter, page, sort}) {
+            this.loadList = async function({filter, page, sort}, context) {
                 const cacheKey = MD5({filter, sort, page});
                 const loadedFromCache = await cache.get(`${type}:l:`, cacheKey);
                 if(loadedFromCache) {
@@ -82,7 +83,7 @@ export class Collection {
                         };
                     }
                 }
-                const loaded = await this._loadList({filter, page, sort});
+                const loaded = await this._loadList({filter, page, sort}, context);
                 const few = {};
                 for(const item of loaded.items) {
                     few[item.id] = item;
@@ -109,8 +110,54 @@ export class Collection {
             this.removeListCache = () => {};
         }
 
-        this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
-        this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
+        if(options.fields) {
+            const setters = {};
+            const getters = {};
+            for(const name in options.fields) {
+                const d = options.fields[name];
+
+                if(d.set !== false) {
+                    const setter = d.set || ((obj, x) => {
+                        obj[name] = x;
+                    });
+                    setters[name] = !d.joi ? setter : (obj, x) => {
+                        const validation = d.joi.validate(x);
+                        if (validation.error) {
+                            throw validation.error;
+                        }
+                        setter(obj, validation.value);
+                    };
+                }
+
+                getters[name] = d.get || (obj => obj[name]);
+            }
+            this.packAttrs = (object) => {
+                const res = {};
+                for(const name in getters) {
+                    res[name] = getters[name](object);
+                }
+                return res;
+            };
+            this.unpackAttrs = (data, patch) => {
+                if(patch) {
+                    throw new Error('Not implemented');
+                } else {
+                    const obj = {};
+                    for (const fieldName in setters) {
+                        setters[fieldName](obj, data[fieldName])
+                    }
+                    for (const fieldName in data) {
+                        if(!setters[fieldName]) {
+                            throw badRequestError(`Unwritable field "${fieldName}"`);
+                        }
+                    }
+                    return obj;
+                }
+            };
+        } else {
+            this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
+            this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
+        }
         this.updateOne = options.updateOne ? async (id, data, context) => {
             const object = await options.updateOne(id, data, context);
             await this.removeObjectCache(id);
@@ -219,21 +266,17 @@ export class Collection {
 
     /**
      * Load single instance raw data (without using cache)
-     * @param {string} id
-     * @returns {object}
      * @private
      */
-    async _loadOne(id) {
+    async _loadOne() {
         throw methodNotAllowedError();
     }
 
     /**
      * Load few instances raw data (without using cache)
-     * @param {array<string>} ids
-     * @returns {object<object>}
      * @private
      */
-    async _loadFew(ids) {
+    async _loadFew() {
         throw methodNotAllowedError();
     }
 
@@ -358,6 +401,23 @@ class Relationship {
                         const list = resource.context.list(type, {
                             filter: await options.getFilterOne(resource)
                         });
+                        await list.load();
+                        return list;
+                    };
+                    this.getListFew = async function (resources) {
+                        const res = [];
+                        for(const resource of resources) {
+                            res.push(await this.getListOne(resource));
+                        }
+                        return res;
+                    };
+                } else if(options.loadObjectsOne) {
+                    this.getListOne = async function (resource) {
+                        const list = new ResourcesTypedList(
+                            resource.context,
+                            type,
+                            (await options.loadObjectsOne(resource)).map(data => resource.context.resource(type, data.id, data))
+                        );
                         await list.load();
                         return list;
                     };
