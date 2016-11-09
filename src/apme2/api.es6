@@ -152,6 +152,22 @@ export class Api {
                 }
 
                 let id = body.data.id;
+                const data = collection.unpackAttrs(body.data.attributes || {}, patch);
+                const passedRels = body.data.relationships || {};
+                for(const relName in passedRels) {
+                    const rel = collection.rels[relName];
+                    if(!rel) {
+                        throw badRequestError('Bad relation name');
+                    }
+                    const passedRelData = passedRels[relName].data;
+                    let relValue;
+                    if(Array.isArray(passedRelData)) {
+                        relValue = passedRelData.map(data => context.resource(data.type, data.id));
+                    } else {
+                        relValue = passedRelData ? context.resource(passedRelData.type, passedRelData.id) : null;
+                    }
+                    rel.setData(data, relValue);
+                }
 
                 // fill/check id
                 if(patch) {
@@ -168,69 +184,11 @@ export class Api {
                             throw badRequestError('Passing id is not allowed');
                         }
                     } else {
-                        id = await collection.generateId();
+                        id = await collection.generateId(data, context);
                     }
                 }
-
-                /*const passedRels = req.body.data.relationships || {};
-                for(const relName in passedRels) {
-                    const relDefinition = req.collection.rels[relName];
-                    if(!relDefinition) {
-                        throw new Error("Unknown relationship name");
-                    }
-                    if(relDefinition.fromList) {
-                        if(!Array.isArray(passedRels[relName].data)) {
-                            throw new Error(`Relationship "${relName}" should be "toMany"`);
-                        }
-                        data = {...data, ...relDefinition.fromList(passedRels[relName].data)};
-                    } else if(relDefinition.type && relDefinition.fromIds) {
-                        if(!Array.isArray(passedRels[relName].data)) {
-                            throw new Error(`Relationship "${relName}" should be "toMany"`);
-                        }
-                        if(passedRels[relName].data.some(rel => rel.type != relDefinition.type)) {
-                            throw new Error(`Inappropriate type in relationship`);
-                        }
-                        data = {...data, ...relDefinition.fromIds(passedRels[relName].data.map(rel => rel.id))};
-                    } else if(relDefinition.fromOne) {
-                        if(Array.isArray(passedRels[relName].data)) {
-                            throw new Error(`Relationship "${relName}" should be "toOne"`);
-                        }
-                        data = {...data, ...relDefinition.fromOne(passedRels[relName].data)};
-                    } else if(relDefinition.type && relDefinition.fromId) {
-                        if(Array.isArray(passedRels[relName].data)) {
-                            throw new Error(`Relationship "${relName}" should be "toOne"`);
-                        }
-                        if(passedRels[relName].data.type != relDefinition.type) {
-                            throw new Error(`Inappropriate type in relationship`);
-                        }
-                        data = {...data, ...relDefinition.fromId(passedRels[relName].data.id)};
-                    }
-                }
-
-                if(req.collection.beforeEditOne) {
-                    await req.collection.beforeEditOne({
-                        action: patch ? 'update' : 'create',
-                        data
-                    }, context);
-                }*/
 
                 const resource = context.resource(req.type, id);
-                const data = collection.unpackAttrs(body.data.attributes || {}, patch);
-                const passedRels = body.data.relationships || {};
-                for(const relName in passedRels) {
-                    const rel = collection.rels[relName];
-                    if(!rel) {
-                        throw badRequestError('Bad relation name')
-                    }
-                    const passedRelData = passedRels[relName].data;
-                    let relValue;
-                    if(Array.isArray(passedRelData)) {
-                        relValue = passedRelData.map(data => context.resource(data.type, data.id));
-                    } else {
-                        relValue = passedRelData ? context.resource(passedRelData.type, passedRelData.id) : null;
-                    }
-                    rel.setData(data, relValue);
-                }
 
                 if(patch) {
                     resource.setData(data);

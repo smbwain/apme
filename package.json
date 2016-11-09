@@ -1,6 +1,6 @@
 {
   "name": "apme",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.7",
   "description": "Jsonapi server middleware for express",
   "main": "dist/apme2/api.js",
   "scripts": {

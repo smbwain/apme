@@ -49,7 +49,7 @@ export class Resource {
         return this._object;
     }
     get rels() {
-        if(this._rels === undefined) {
+        if(!this._rels) {
             throw new Error(`Try to read "rels" property of unloaded resource`);
         }
         return this._rels;
@@ -57,7 +57,7 @@ export class Resource {
     async load() {
         if(this._object === undefined) {
             const collection = this.context.api.collections[this.type];
-            this._attachObject( (await collection.loadOne(this.id)) || null);
+            this._attachObject( (await collection.loadOne(this.id, this.context)) || null);
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
             }
@@ -95,8 +95,7 @@ export class Resource {
                     continue;
                 }
                 const relData = this.rels[relName];
-                if(!relData) {
-                    console.log(this);
+                if(relData === undefined) {
                     throw new Error(`No relationship data ${this.type}:${relName}`);
                 }
                 data.relationships[relName] = {
@@ -170,6 +169,9 @@ export class Resource {
             return await perm.one(this, operation);
         }
         return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation);
+    }
+    async clearCache() {
+        await this.context.api.collections[this.type].removeObjectCache(this.id);
     }
     /*toString() {
         return JSON.stringify({
@@ -352,7 +354,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
 
         const toLoad = this.items.filter(item => !item.loadedObject);
         if(toLoad.length) {
-            const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id));
+            const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id), this.context);
             for(const resource of toLoad) {
                 resource._attachObject(res[resource.id] || null);
             }
