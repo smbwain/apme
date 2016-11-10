@@ -139,10 +139,15 @@ export class Collection {
                 return res;
             };
             this.unpackAttrs = (data, patch) => {
+                const obj = {};
                 if(patch) {
-                    throw new Error('Not implemented');
+                    for(const fieldName in data) {
+                        if(!setters[fieldName]) {
+                            throw badRequestError(`Unwritable field "${fieldName}"`);
+                        }
+                        setters[fieldName](obj, data[fieldName]);
+                    }
                 } else {
-                    const obj = {};
                     for (const fieldName in setters) {
                         setters[fieldName](obj, data[fieldName])
                     }
@@ -151,8 +156,8 @@ export class Collection {
                             throw badRequestError(`Unwritable field "${fieldName}"`);
                         }
                     }
-                    return obj;
                 }
+                return obj;
             };
         } else {
             this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
