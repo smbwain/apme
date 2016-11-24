@@ -42,73 +42,12 @@ export class Collection {
                 return loaded;
             };
         }
+        if(options.listCacheInvalidateKeys) {
+            this._listCacheInvalidateKeys = options.listCacheInvalidateKeys;
+        }
 
         // cache
-        if(options.cache) {
-            const cache = options.cache;
-            this.loadOne = function(id, context) {
-                return cache.load(`${type}:o:`, id, () => (
-                    this._loadOne(id, context)
-                ));
-            };
-            this.loadFew = function(ids, context) {
-                /*const keysMap = {};
-                for(const id of ids) {
-                    keysMap[`${type}:o:${id}`] = id;
-                }
-                console.log('mload>>>', Object.keys(keysMap));*/
-                return cache.mload(`${type}:o:`, ids, rest => {
-                    // console.log(rest.map(cacheKey => keysMap[cacheKey]));
-                    return this._loadFew(rest, context);
-                });
-            };
-            this.loadList = async function({filter, page, sort}, context) {
-                const cacheKey = MD5({filter, sort, page});
-                const loadedFromCache = await cache.get(`${type}:l:`, cacheKey);
-                if(loadedFromCache) {
-                    const fromCache = await cache.mget(`${type}:o:`, loadedFromCache.ids);
-                    let items = [];
-                    for(const id of loadedFromCache.ids) {
-                        const value = fromCache[id];
-                        if(!value) {
-                            items = null;
-                            break;
-                        }
-                        items.push(value);
-                    }
-                    if(items) {
-                        return {
-                            items,
-                            meta: loadedFromCache.meta
-                        };
-                    }
-                }
-                const loaded = await this._loadList({filter, page, sort}, context);
-                const few = {};
-                for(const item of loaded.items) {
-                    few[item.id] = item;
-                }
-                await cache.mset(`${type}:o:`, few);
-                await cache.set(`${type}:l:`, cacheKey, {
-                    meta: loaded.meta,
-                    ids: loaded.items.map(item => item.id)
-                });
-                return loaded;
-            };
-            this.removeObjectCache = async id => {
-                return cache.remove(`${type}:o:`, id);
-            };
-            this.removeListCache = ({filter, sort, page}) => {
-                const cacheKey = MD5({filter, sort, page});
-                return cache.remove(`${type}:l:`, cacheKey);
-            };
-        } else {
-            this.loadOne = this._loadOne;
-            this.loadFew = this._loadFew;
-            this.loadList = this._loadList;
-            this.removeObjectCache = () => {};
-            this.removeListCache = () => {};
-        }
+        this._cache = options.cache;
 
         if(options.fields) {
             const setters = {};
@@ -270,11 +209,41 @@ export class Collection {
     }
 
     /**
+     * Load single instance raw data
+     * @param {string} id
+     * @param {Context} context
+     * @returns {Promise.<Resource|null>}
+     */
+    loadOne(id, context) {
+        if(this._cache) {
+            return this._loadOne(id, context);
+        }
+        return this._cache.load(`${this.type}:o:`, id, () => (
+            this._loadOne(id, context)
+        ));
+    }
+
+    /**
      * Load single instance raw data (without using cache)
      * @private
      */
     async _loadOne() {
         throw methodNotAllowedError();
+    }
+
+    /**
+     * Load few instances raw data
+     * @param {[string]} ids
+     * @param {Context} context
+     * @returns {Promise.<Object.<Resource>>}
+     */
+    loadFew(ids, context) {
+        if(!this._cache) {
+            return this._loadFew(ids, context);
+        }
+        return this._cache.mload(`${this.type}:o:`, ids, rest => {
+            return this._loadFew(rest, context);
+        });
     }
 
     /**
@@ -285,8 +254,68 @@ export class Collection {
         throw methodNotAllowedError();
     }
 
+    async loadList({filter, page, sort}, context) {
+        if(!this._cache) {
+            return await this._loadList({filter, page, sort}, context);
+        }
+        const now = Date.now();
+        const cacheKey = MD5({filter, sort, page});
+        let loadedFromCache = await this._cache.get(`${this.type}:l:`, cacheKey);
+        if(
+            this._listCacheInvalidateKeys &&
+            !(await this.checkInvalidate( this._listCacheInvalidateKeys({filter, sort, page}), loadedFromCache ? loadedFromCache.ts : 0, now))
+        ) {
+            loadedFromCache = null;
+        }
+        if (loadedFromCache) {
+            const fromCache = await this._cache.mget(`${this.type}:o:`, loadedFromCache.ids);
+            let items = [];
+            for (const id of loadedFromCache.ids) {
+                const value = fromCache[id];
+                if (!value) {
+                    items = null;
+                    break;
+                }
+                items.push(value);
+            }
+            if (items) {
+                return {
+                    items,
+                    meta: loadedFromCache.meta
+                };
+            }
+        }
+        const loaded = await this._loadList({filter, page, sort}, context);
+        const few = {};
+        for (const item of loaded.items) {
+            few[item.id] = item;
+        }
+        await this._cache.mset(`${this.type}:o:`, few);
+        await this._cache.set(`${this.type}:l:`, cacheKey, {
+            meta: loaded.meta,
+            ids: loaded.items.map(item => item.id),
+            ts: now
+        });
+        return loaded;
+    }
+
     async _loadList() {
         throw methodNotAllowedError();
+    }
+
+    async removeObjectCache(id) {
+        if(this._cache) {
+            await this._cache.remove(`${this.type}:o:`, id);
+        }
+    };
+
+    /**
+     * @deprecated Use invalidates instead
+     */
+    async removeListCache({filter, sort, page}) {
+        if(this._cache) {
+            return await cache.remove(`${this.type}:l:`, MD5({filter, sort, page}));
+        }
     }
 
     parseFields(fields) {
@@ -320,6 +349,36 @@ export class Collection {
             }
         }
         return obj;
+    }
+
+    async setInvalidate(keys) {
+        if(!this._cache) {
+            return;
+        }
+        await this._cache.mremove(`${this.type}:i:`, keys);
+    }
+
+    async checkInvalidate(keys, stamp, now = Date.now()) {
+        if(!this._cache || !keys.length) {
+            return true;
+        }
+        const invalidators = await this._cache.mget(`${this.type}:i:`, keys);
+        const toSet = {};
+        let set = false;
+        let res = true;
+        for(const key of keys) {
+            if(!invalidators[key]) {
+                res = false;
+                set = true;
+                toSet[key] = now;
+            } else if(stamp < invalidators[key]) {
+                res = false;
+            }
+        }
+        if(set) {
+            await this._cache.mset(`${this.type}:i:`, toSet);
+        }
+        return res;
     }
 }
 

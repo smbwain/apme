@@ -34,6 +34,10 @@ export class Context {
         return new ResourceTypedQuery(this, type, params);
     }
 
+    async setInvalidate(type, keys) {
+        await this.api.collections[type].setInvalidate(keys);
+    }
+
     packRefData(value) {
         if(value instanceof Resource) {
             return value.packRef();
