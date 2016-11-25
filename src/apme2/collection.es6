@@ -215,7 +215,7 @@ export class Collection {
      * @returns {Promise.<Resource|null>}
      */
     loadOne(id, context) {
-        if(this._cache) {
+        if(!this._cache) {
             return this._loadOne(id, context);
         }
         return this._cache.load(`${this.type}:o:`, id, () => (
