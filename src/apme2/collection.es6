@@ -314,7 +314,7 @@ export class Collection {
      */
     async removeListCache({filter, sort, page}) {
         if(this._cache) {
-            return await cache.remove(`${this.type}:l:`, MD5({filter, sort, page}));
+            return await this._cache.remove(`${this.type}:l:`, MD5({filter, sort, page}));
         }
     }
 
