@@ -1,49 +1,124 @@
 
+# class Api
+
+## api.define(name, options)
+
+Creates new resource type.
+
+- name: string - Name of resources
+- options: object - Resource options. Possible options are [here](define/options.md)
+
+## api.expressRouter(options)
+
+Returns express router, which could be used as express middleware in app.use method.
+
+- options: object = {}
+    - url: string = "/" - Url to your api endpoint.
+        It will be added to links in responses, so it's better to provide absolute url.
+
+## api.context(options)
+
+Creates context to make some manual actions with api resources.
+
+- options: object = {}
+    - req
+    - privileged: boolean
+    
+Returns: Context
+
 # class Context
 
-## .resource(type: String, id: String): Resource
+## context.resource(type, id)
 
-## .list(type: String, {filter: Object, page: Object, sort: Object, fields: Object}): ResourcesTypedQuery
+Create single instance of resource
+
+- type: string
+- id: string
+
+Returns: Resource
+
+## context.resources(type, ids)
+
+## context.list(type, options)
+
+Create list of resource instances.
+
+- type: string
+- options: object = {}
+    - filter: object
+    - page: object
+    - sort: object
+    - fields: object
+    
+Returns: ResourcesTypedQuery
+
+## context.setInvalidate(type, keys)
+
+## context.packRefData(value)
 
 # class Resource
 
-## .type: String
+## resource.type: String
 
-## .id: String
+## resource.id: String
 
-## .load(): Promise\<Resource>
+## resource.load()
 
-## .object: mixed
+Load resource data and resource relationships.
+If data and relationships are loaded, this method do nothing.
+ 
+Returns promise which resolves with current resource.
+Returns: Promise\<Resource>
 
-## .loaded: boolean
+## resource.object: mixed
+
+Row data of resource instance.
+It's null for unexisting object.
+
+## resource.loaded: boolean
 
 Does resource loaded.
-If false, this object only points at resource.
 
-## .exists: boolean
+## resource.exists: boolean
 
 Does resource exist.
-Property has truthful value only after resource loaded. Before loading it indicates false.
+This property could be read only for loaded resource.
 
-## .pack(fieldSet: Set\<String>): Object
+## resource.pack(fieldSet)
 
-## .update(data: Object): Promise\<Resource>
+- fieldSet: Set\<String>
 
-## .remove(): Promise
+Returns: object
 
-## .checkPermission(operation): Promise\<Boolean>
+## resource.update()
+
+Returns: Promise\<Resource>
+
+## resource.create()
+
+Returns: Promise\<Resource>
+
+## resource.remove()
+
+Returns: Promise
+
+## resource.include(includeTree)
+
+## resource.checkPermission(operation): Promise\<Boolean>
 
 # class ResourcesList
 
-## .load(): Promise\<ResourceList>
+## resourcesList.load()
 
-## .loaded: boolean
+Returns: Promise\<ResourceList>
 
-## .push(resource)
+## resourcesList.loaded: boolean
 
-## .packItems(fieldLists: Object\<Set\<String>>): Array\<Object>
+## resourcesList.push(resource)
 
-## .checkPermission(operation): Promise\<Boolean>
+## resourcesList.packItems(fieldLists: Object\<Set\<String>>): Array\<Object>
+
+## resourcesList.checkPermission(operation): Promise\<Boolean>
 
 # class ResourcesTypedList: ResourcesList
 

@@ -2,9 +2,10 @@
 import {Resource, ResourcesMap, AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resource';
 
 export class Context {
-    constructor(api, {req}) {
+    constructor(api, {req, privileged}) {
         this.api = api;
         this.req = req;
+        this.privileged = privileged;
         this._loadedMap = new ResourcesMap();
         this.fields = {};
     }
@@ -49,49 +50,4 @@ export class Context {
             throw new Error();
         }
     }
-
-    /**
-     * @param {Resource} resource
-     * @returns {Resource}
-     */
-    /*async loadOne(resource) {
-        return await this._syncCache.load(resource, () => (
-            this.api.collections[type].loadOne(id)
-        ));
-    }
-
-    async loadList(type, {filter, page, sort}) {
-        return await this.api.collections[type].loadList({filter, page, sort});
-    }
-
-    async loadFew(type, ids) {
-        return await this._syncCache.load(type, ids, rest => (
-            this.api.collections[type].loadFew(rest)
-        ));
-    }
-
-    /*async loadFewMixed(refs) {
-        const map = {};
-    }*/
-
-    /*async include(aObjects, include) {
-        throw new Error('Not implemented');
-    }*/
-
-    /*packOne(type, obj, fieldsArr) {
-        const res = {
-            type,
-            id: obj.id,
-            attributes: this.api.collections[type].packAttrs(obj)
-        };
-        return res;
-    }
-
-    packFew(type, objs, fieldsObj) {
-        return objs.map(obj => this.packOne(type, obj, fieldsObj));
-    }
-
-    async packFewMixed(aObjects, fieldsObj) {
-        return aObjects.map(({type, obj}) => this.packOne(type, obj, fieldsObj));
-    }*/
 }
