@@ -8,6 +8,14 @@ export class Context {
         this.privileged = privileged;
         this._loadedMap = new ResourcesMap();
         this.fields = {};
+        this.meta = {};
+    }
+
+    setMeta(updates) {
+        this.meta = {
+            ...this.meta,
+            ...updates
+        };
     }
 
     resource(type, id, object) {

@@ -258,6 +258,7 @@ export class AbstractResourcesList {
     }
     push(resource) {
         this.items.push(resource);
+        this.loaded = false;
     }
     _clearUnexisting() {
         this.items = this.items.filter(resource => resource.exists);
@@ -308,7 +309,7 @@ export class AbstractResourcesList {
                                     list.push(resource); // @todo: what about unique
                                 }
                                 if(!usedMap.get(resource.type, resource.id)) {
-                                    needToLoad.push(resource); // @todo: what about unique
+                                    needToLoad.push(resource);
                                     usedMap.add(resource);
                                 }
                             }
@@ -321,7 +322,7 @@ export class AbstractResourcesList {
 
             await needToLoad.load();
             for(const resource of needToLoad.items) {
-                includedResult.push(resource)
+                includedResult.push(resource);
             }
         }
 
@@ -340,13 +341,16 @@ export class ResourcesTypedList extends AbstractResourcesList {
     constructor(context, type, items = []) {
         super(context, items);
         this.type = type;
+        this.loaded = false;
     }
+
     push(resource) {
         if(resource.type != this.type) {
             throw new Error(`Wrong type`);
         }
         super.push(resource);
     }
+
     async load() {
         if(this.loaded) {
             return this;
@@ -371,6 +375,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
 
         return this;
     }
+
     async _loadRels() {
         const items = this.items.filter(item => !item.loadedRels);
         const fields = this.context.fields[this.type];
@@ -385,11 +390,13 @@ export class ResourcesTypedList extends AbstractResourcesList {
             }
         }
     }
+
     splitByType() {
         return {
             [this.type]: this
         };
     }
+
     async checkPermission(operation) {
         if(this.context.privileged) {
             return true;
@@ -486,7 +493,7 @@ export class ResourceTypedQuery extends ResourcesTypedList {
         return this;
     }
     async checkPermission(operation) {
-        await this.load();
+        await this.load(); // @todo: remove that
         return await ResourcesTypedList.prototype.checkPermission.call(this, operation);
     }
     async clearCache() {

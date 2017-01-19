@@ -211,7 +211,8 @@ export class Api {
                     included: included.length ? included : undefined,
                     links: {
                         self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
-                    }
+                    },
+                    meta: Object.keys(context.meta).length ? context.meta : undefined
                 };
             });
         };
