@@ -62,7 +62,7 @@ export class Resource {
                 throw forbiddenError();
             }
         }
-        if(!this._rels) {
+        if(!this._rels && this._object) {
             await this._loadRels();
         }
         return this;
