@@ -1,6 +1,6 @@
 import 'source-map-support/register';
 
-import {Api, jsonErrorHandler} from '../apme2/api';
+import {Api, jsonErrorHandler} from '..';
 
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -95,9 +95,14 @@ describe('simple perms', () => {
                 return contentType == 'application/vnd.api+json' || contentType == 'application/json';
             }
         }));
-        app.use('/api', api.expressRouter({
-            url: '/api/'
-        }), jsonErrorHandler());
+        app.use(
+            '/api',
+            api.expressInitMiddleware(),
+            api.expressJsonApiRouter({
+                url: '/api/'
+            }),
+            jsonErrorHandler()
+        );
         server = app.listen(TEST_PORT, done);
     });
 

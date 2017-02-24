@@ -1,0 +1,5 @@
+site_name: apme
+pages:
+  - Get Started: index.md
+  - Api Reference: api.md
+# theme: readthedocs

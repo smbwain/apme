@@ -3,20 +3,9 @@ import Joi from 'joi';
 
 import {Collection} from './collection';
 import {Context} from './context';
-import {jsonErrorHandler, badRequestError, notFoundError} from './errors';
+import {badRequestError, notFoundError} from './errors';
 import asyncMW from 'async-mw';
-import {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from '../cache';
 import querystring from 'querystring';
-
-export function group(arr) {
-    const map = {};
-    for(const item of arr) {
-        map[item.id] = item;
-    }
-    return map;
-}
-
-export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache, jsonErrorHandler};
 
 const schemas = {};
 {
@@ -57,7 +46,16 @@ export class Api {
         return new Context(this, options);
     }
 
-    expressRouter({url = '/'} = {}) {
+    expressInitMiddleware() {
+        return (req, res, next) => {
+            req.apmeContext = this.context({
+                req
+            });
+            next();
+        };
+    }
+
+    expressJsonApiRouter({url = '/'} = {}) {
         const router = require('express').Router();
 
         function urlBuilder(path, params) {
@@ -85,7 +83,6 @@ export class Api {
         });
 
         router.get('/:collection', asyncMW(async req => {
-            const context = this.context({req});
             const {collection, type} = req;
 
             const fields = collection.parseFields(req.query.fields);
@@ -94,7 +91,7 @@ export class Api {
             const sort = req.collection.parseSort(req.query.sort);
             const page = req.query.page;
 
-            const list = await context.list(type, {sort, page, filter}).load();
+            const list = await req.apmeContext.list(type, {sort, page, filter}).load();
             const included = (await list.include(include)).packItems(fields, urlBuilder);
 
             return {
@@ -108,11 +105,10 @@ export class Api {
         }));
 
         router.get('/:collection/:id', asyncMW(async req => {
-            const context = this.context({req});
             const {collection} = req;
             const {type, id} = req;
 
-            const resource = await context.resource(type, id).load();
+            const resource = await req.apmeContext.resource(type, id).load();
             if(!resource.exists) {
                 throw notFoundError();
             }
@@ -133,7 +129,6 @@ export class Api {
 
         const updaterMiddleware = (patch) => {
             return asyncMW(async req => {
-                const context = this.context({req});
                 const {collection} = req;
 
                 // validate basic format
@@ -144,7 +139,7 @@ export class Api {
                 });
                 // @todo: return 400 on error
 
-                // context.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
+                // req.apmeContext.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
 
                 // check type
                 if(body.data.type && body.data.type != req.type) {
@@ -162,9 +157,9 @@ export class Api {
                     const passedRelData = passedRels[relName].data;
                     let relValue;
                     if(Array.isArray(passedRelData)) {
-                        relValue = passedRelData.map(data => context.resource(data.type, data.id));
+                        relValue = passedRelData.map(data => req.apmeContext.resource(data.type, data.id));
                     } else {
-                        relValue = passedRelData ? context.resource(passedRelData.type, passedRelData.id) : null;
+                        relValue = passedRelData ? req.apmeContext.resource(passedRelData.type, passedRelData.id) : null;
                     }
                     rel.setData(data, relValue);
                 }
@@ -180,25 +175,23 @@ export class Api {
                     }
                 } else {
                     if(id) {
-                        if(!collection.passId || (typeof collection.passId == 'function' && !(await collection.passId(context, id)))) {
+                        if(!collection.passId || (typeof collection.passId == 'function' && !(await collection.passId(req.apmeContext, id)))) {
                             throw badRequestError('Passing id is not allowed');
                         }
                     } else {
-                        id = await collection.generateId(data, context);
+                        id = await collection.generateId(data, req.apmeContext);
                     }
                 }
 
-                const resource = context.resource(req.type, id);
+                const resource = req.apmeContext.resource(req.type, id);
 
                 if(patch) {
-                    resource.setData(data);
-                    await resource.update();
+                    await resource.update(data);
                     if(!resource.exists) {
                         throw notFoundError();
                     }
                 } else {
-                    resource.setData(data);
-                    await resource.create();
+                    await resource.create(data);
                 }
 
                 const fields = collection.parseFields(req.query.fields);
@@ -212,7 +205,7 @@ export class Api {
                     links: {
                         self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
                     },
-                    meta: Object.keys(context.meta).length ? context.meta : undefined
+                    meta: Object.keys(req.apmeContext.meta).length ? req.apmeContext.meta : undefined
                 };
             });
         };
@@ -221,9 +214,7 @@ export class Api {
         router.patch('/:collection/:id', updaterMiddleware(true));
 
         router.delete('/:collection/:id', asyncMW(async (req, res) => {
-            const context = this.context({req});
-
-            if(!await context.resource(req.type, req.id).remove()) {
+            if(!await req.apmeContext.resource(req.type, req.id).remove()) {
                 throw notFoundError();
             }
 
@@ -232,8 +223,6 @@ export class Api {
         }));
 
         router.get('/:collection/:id/:relName', asyncMW(async req => {
-            const context = this.context({req});
-
             const {collection} = req;
             const {type, id} = req;
             const {relName} = req.params;
@@ -243,7 +232,7 @@ export class Api {
                 throw notFoundError('No relation with such name');
             }
 
-            const mainResource = await context.resource(type, id).load();
+            const mainResource = await req.apmeContext.resource(type, id).load();
             if(!mainResource.exists) {
                 throw notFoundError();
             }
@@ -290,16 +279,16 @@ export class Api {
             }*/
 
             /*if(req.query.include) {
-                context.include = parseInclude(req.query.include);
+             req.apmeContext.include = parseInclude(req.query.include);
             }*/
 
-            /*const mainData = (await req.collection.loadByIdsAndPack([req.params.id], context))[0];
+            /*const mainData = (await req.collection.loadByIdsAndPack([req.params.id], req.apmeContext))[0];
             if(!mainData) {
                 throw notFoundError();
             }
 
             const data = await loadAllRelationships(this, {
-                ...context,
+                ...req.apmeContext,
                 include: {
                     [req.params.relName]: {}
                 }
@@ -307,13 +296,11 @@ export class Api {
 
             return {
                 data: (rel.getId || rel.getOne) ? data[0] || null : data,
-                included: await loadAllRelationships(this, context, data)
+                included: await loadAllRelationships(this, req.apmeContext, data)
             };*/
         }));
 
         router.get('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            const context = this.context({req});
-
             const {collection} = req;
             const {type, id} = req;
             const {relName} = req.params;
@@ -323,7 +310,7 @@ export class Api {
                 throw notFoundError('No relation with such name');
             }
 
-            const mainResource = await context.resource(type, id).load();
+            const mainResource = await req.apmeContext.resource(type, id).load();
             if(!mainResource.exists) {
                 throw notFoundError();
             }
@@ -340,7 +327,7 @@ export class Api {
             }*/
 
             return {
-                data: context.packRefData(await rel.getOne(mainResource)),
+                data: req.apmeContext.packRefData(await rel.getOne(mainResource)),
                 links: {
                     self: urlBuilder(`${type}/${id}/relationships/${relName}`),
                     related: urlBuilder(`${type}/${id}/${relName}`)

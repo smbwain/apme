@@ -1,8 +1,9 @@
 
-import {Resource, ResourcesMap, AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resource';
+import {Resource, ResourcesMap} from './resource';
+import {AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resources-lists';
 
 export class Context {
-    constructor(api, {req, privileged}) {
+    constructor(api, {req, privileged = false, fields = {}, meta = {}}) {
         this.api = api;
         this.req = req;
         this.privileged = privileged;
