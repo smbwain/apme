@@ -22,8 +22,7 @@ Returns express router, which could be used as express middleware in app.use met
 
 Create new apme context. Context allow you to make actions on resources.
 
-__Usually you shouldn't call this method manually in the context of express user request.
-Just use _req.apmeContext_ instead.__
+__Usually you shouldn't call this method manually when you use express. Use _req.apmeContext_ instead.__
 
 - options: object = {}
     - req

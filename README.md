@@ -4,17 +4,17 @@ apme
 ```
 Alpha testing
 @todo: make api stable
-@todo: improve documentation
+@todo: make documentation
 @todo: write more tests to cover all features
 ```
 
 Jsonapi server library with validation, relationships and caching on the board.
 
-The aim is to give you control over jsonapi actions flow, instead of connecting api directly to some particular database.
-This library manages jsonapi whilst implementing getters/setters for resources is your task. It's no matter whether you store data in local db, fetch it from external service(s), or calculate it on the fly.
+This library manages jsonapi whilst implementing getters/setters for resources is your task.
+It's no matter whether you store data in local db, fetch it from external service(s), or calculate it on the fly.
  
-_apme_ manages __toOne__ and __toMany relationships__ itself. You should only implement getters/setters and describe how your resources are connected between each other. Then _apme_ will allow you to make complex requests, fetching included resources by single api call.
-It could be very useful for building API Gateway in microservices architecture. You should implement accessors for each resource separately (which probably communicate with other services in your infrastructure) and _apme_ combines it into single api.
+_apme_ manages __toOne__ and __toMany relationships__ itself. You should only implement getters/setters and describe how your resources are connected between each other. Then _apme_ allows you to make complex requests, fetching included resources by single api call.
+It could be very useful for building API Gateway in microservices architecture. You should implement accessors for each resource separately (which probably communicate with other services in your infrastructure) and _apme_ combines it into single API.
 It tries to call your accessors as few as possible, using caching and batch accessors.
 
 Short description
@@ -40,12 +40,12 @@ app.use(bodyParser.json({
 
 // api and error handling
 const api = new Api();
-app.use('/api', api.expressRouter({
+app.use('/api', api.expressInitMiddleware(), api.expressJsonApiRouter({
     url: '/api'
 }), jsonErrorHandler());
 
 // resource definition
-api.define('books', {
+api.define('items', {
     // ... resource definition
 });
 ```
@@ -94,8 +94,3 @@ api.define('books', {
     }
 });
 ```
-
-API
----
-
-[see API](docs/api.md)

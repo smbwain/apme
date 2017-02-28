@@ -1,4 +1,7 @@
 /.idea
 /node_modules
 /src
+/coverage
+/.nyc_output
+/doc
 gulpfile.js
