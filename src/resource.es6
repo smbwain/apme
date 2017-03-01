@@ -1,5 +1,5 @@
 
-import {forbiddenError} from './errors';
+import {forbiddenError, notFoundError} from './errors';
 import {ResourcesTypedList} from './resources-lists';
 
 function filterFields(obj, fields) {
@@ -24,37 +24,86 @@ export class Resource {
     _attachObject(object) {
         this._object = object;
     }
+
+    /**
+     * @return {boolean}
+     */
     get loaded() {
         return this._object !== undefined /*&& !!this._rels*/;
     }
+
+    /**
+     * @deprecated
+     * @return {boolean}
+     */
     get loadedObject() {
         return this._object !== undefined;
     }
+
+    /**
+     * @deprecated
+     * @return {boolean}
+     */
     get loadedRels() {
         return !!this._rels;
     }
+
+    /**
+     * @return {boolean}
+     */
     get exists() {
         if(this._object === undefined) {
             throw new Error(`Try to read "exists" property of unloaded resource`);
         }
         return !!this._object;
     }
+
+    /**
+     * @deprecated
+     * @return {*}
+     */
     get object() {
         if(this._object === undefined) {
             throw new Error(`Try to read "object" property of unloaded resource`);
         }
         return this._object;
     }
+
+    /**
+     * @return {object}
+     */
+    get data() {
+        if(!this._object) {
+            if(this._object === undefined) {
+                throw new Error(`Try to read "data" property of unloaded resource`);
+            } else {
+                throw new Error(`Try to read "data" property of resource which doesn't exist`);
+            }
+        }
+        return this._object;
+    }
+
+    /**
+     * @return {object}
+     */
     get rels() {
         if(!this._rels) {
             throw new Error(`Try to read "rels" property of unloaded resource`);
         }
         return this._rels;
     }
-    async load() {
+
+    /**
+     * @return {Resource}
+     */
+    async load({mustExist = false}) {
         if(this._object === undefined) {
             const collection = this.context.api.collections[this.type];
-            this._attachObject( (await collection.loadOne(this.id, this.context)) || null);
+            const data = (await collection.loadOne(this.id, this.context));
+            if(!data && mustExist) {
+                throw notFoundError();
+            }
+            this._attachObject(data || null);
             if(!await this.checkPermission('read')) {
                 throw forbiddenError();
             }
@@ -64,6 +113,7 @@ export class Resource {
         }
         return this;
     }
+
     async _loadRels() {
         const collection = this.context.api.collections[this.type];
         const fields = this.context.fields[this.type];

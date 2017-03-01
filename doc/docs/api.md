@@ -3,7 +3,7 @@
 
 ## .define(name, options)
 
-Creates new resource type.
+Create new resource type.
 
 - name: String - Name of resources
 - options: Object - Resource options. Possible options are [here](define/options.md)
@@ -12,7 +12,7 @@ Creates new resource type.
 
 ## .expressJsonApiRouter(options)
 
-Returns express router, which could be used as express middleware in app.use method.
+Return express router, which could be used as express middleware in app.use method.
 
 - options: Object = {}
     - url: string = "/" - Url to your api endpoint.
@@ -79,6 +79,10 @@ If data and relationships are loaded, this method do nothing.
  
 Returns promise which resolves with current resource.
 Returns: Promise\<Resource>
+
+## .data: object
+Row data
+Throws error, if resource isn't loaded or doesn't exist.
 
 ## .object: mixed
 
