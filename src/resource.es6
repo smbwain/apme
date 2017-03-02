@@ -96,7 +96,7 @@ export class Resource {
     /**
      * @return {Resource}
      */
-    async load({mustExist = false}) {
+    async load({mustExist = false} = {}) {
         if(this._object === undefined) {
             const collection = this.context.api.collections[this.type];
             const data = (await collection.loadOne(this.id, this.context));
@@ -167,7 +167,7 @@ export class Resource {
         };
     }
     async update(data) {
-        if(!await this.checkPermission('read') || !await this.checkPermission('update')) {
+        if(!await this.checkPermission('read') || !await this.checkPermission('update', data)) {
             throw forbiddenError();
         }
         this._attachObject(
@@ -177,7 +177,7 @@ export class Resource {
         return this;
     }
     async create(data) {
-        if(!await this.checkPermission('read') || !await this.checkPermission('create')) {
+        if(!await this.checkPermission('read') || !await this.checkPermission('create', data)) {
             throw forbiddenError();
         }
         this._attachObject(
@@ -199,7 +199,7 @@ export class Resource {
     async include(includeTree) {
         return await (new ResourcesTypedList(this.context, this.type, [this])).include(includeTree);
     }
-    async checkPermission(operation) {
+    async checkPermission(operation, data) {
         if(this.context.privileged) {
             return true;
         }
@@ -211,9 +211,9 @@ export class Resource {
             return await perm.byContext(this.context);
         }
         if(perm.one) {
-            return await perm.one(this, operation);
+            return await perm.one(this, operation, data);
         }
-        return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation);
+        return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation, data);
     }
     async clearCache() {
         await this.context.api.collections[this.type].removeObjectCache(this.id);
