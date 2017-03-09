@@ -1,5 +1,5 @@
 
-import {ResourcesTypedList} from './resource';
+import {ResourcesTypedList} from './resources-lists';
 
 export class Relationship {
     constructor(collection, name, options) {
