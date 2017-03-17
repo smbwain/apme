@@ -88,7 +88,7 @@ export class Collection {
                     }
                 } else {
                     for (const fieldName in setters) {
-                        setters[fieldName](obj, data[fieldName])
+                        setters[fieldName](obj, data[fieldName]);
                     }
                     for (const fieldName in data) {
                         if(!setters[fieldName]) {
@@ -102,18 +102,10 @@ export class Collection {
             this.packAttrs = options.packAttrs || (({id, ...rest}) => rest);
             this.unpackAttrs = options.unpackAttrs || (attrs => ({...attrs}));
         }
-        this.updateOne = options.updateOne ? async (id, data, context) => {
-            const object = await options.updateOne(id, data, context);
-            await this.removeObjectCache(id);
-            return object;
-        } : function() {
+        this._update = options.update || options.upsert || function() {
             throw new Error('Method not allowed');
         };
-        this.createOne = options.createOne ? async (id, data, context) => {
-            const object = await options.createOne(id, data, context);
-            await this.removeObjectCache(id);
-            return object;
-        } : function() {
+        this._create = options.create || options.upsert || function() {
             throw new Error('Method not allowed');
         };
         this.removeOne = options.removeOne ? async (id, context) => {
@@ -131,27 +123,24 @@ export class Collection {
         // perms
         function wrapPerm(perms, names) {
             for(const name of names) {
-                if(perms[name] != null) {
-                    if(typeof perms[name] == 'function') {
-                        return {
-                            byContext: perms[name]
-                        }
-                    } else {
-                        return {
-                            'const': perms[name]
-                        }
-                    }
+                const perm = perms[name];
+                if(perm === undefined) {
+                    continue;
                 }
-                if(perms[`${name}One`] || perms[`${name}Few`]) {
-                    const res = {};
-                    if(perms[`${name}One`]) {
-                        res.one = perms[`${name}One`];
-                    }
-                    if(perms[`${name}Few`]) {
-                        res.few = perms[`${name}Few`];
-                    }
-                    return res;
+                if(typeof perm == 'function') {
+                    return {
+                        one: perm
+                    };
                 }
+                if(typeof perm == 'object' && perm && (perm.few || perm.one || perm.byContext)) {
+                    return perm;
+                }
+                if(typeof perm == 'boolean') {
+                    return {
+                        const: perms[name]
+                    };
+                }
+                throw new Error('Wrong permission description');
             }
             return {
                 'const': true
@@ -307,7 +296,7 @@ export class Collection {
         if(this._cache) {
             await this._cache.remove(`${this.type}:o:`, id);
         }
-    };
+    }
 
     /**
      * @deprecated Use invalidates instead
@@ -339,9 +328,9 @@ export class Collection {
 
         // @todo: validate it
         const obj = {};
-        function bld(curObj, path, i) {
+        /*function bld(curObj, path, i) {
             curObj[path[i]] || (curObj[path[i]] = {});
-        }
+        }*/
         for(const includeElement of includeString.split(',')) {
             let curObj = obj;
             for(const current of includeElement.split('.')) {

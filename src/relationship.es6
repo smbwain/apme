@@ -1,5 +1,6 @@
 
 import {ResourcesTypedList} from './resources-lists';
+import {badRequestError} from './errors';
 
 export class Relationship {
     constructor(collection, name, options) {
@@ -16,7 +17,7 @@ export class Relationship {
                         return id ? resource.context.resource(type, id) : null;
                     };
                     this.getResourceFew = async function (resources) {
-                        const res = Array(resources.length);
+                        const res = new Array(resources.length);
                         for(let i = resources.length-1; i>=0; i--) {
                             res[i] = await this.getResourceOne(resources[i]);
                         }

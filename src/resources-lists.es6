@@ -101,7 +101,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
 
     push(resource) {
         if(resource.type != this.type) {
-            throw new Error(`Wrong type`);
+            throw new Error('Wrong type');
         }
         super.push(resource);
     }

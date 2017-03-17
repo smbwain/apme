@@ -1,6 +1,6 @@
 {
   "name": "apme",
-  "version": "1.1.0-alpha.3",
+  "version": "1.2.0-alpha.1",
   "description": "Jsonapi server middleware for express",
   "main": "dist/index.js",
   "scripts": {
@@ -28,9 +28,11 @@
     "node": ">=5"
   },
   "devDependencies": {
+    "babel-eslint": "7.1.1",
     "babel-plugin-transform-object-rest-spread": "6.16.0",
     "babel-preset-es2016-node5": "1.1.2",
     "body-parser": "1.15.2",
+    "eslint": "3.17.1",
     "express": "4.14.0",
     "gulp": "3.9.1",
     "gulp-babel": "6.1.2",

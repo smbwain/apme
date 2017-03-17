@@ -28,13 +28,14 @@ const schemas = {};
             type: Joi.string(),
             attributes: Joi.object(),
             relationships: Joi.object().pattern(/.*/, schemas.relationship)
-        })
+        }),
+        meta: Joi.object()
     });
 }
 
 
 export class Api {
-    constructor(options = {}) {
+    constructor() {
         this.collections = {};
     }
 
@@ -73,7 +74,7 @@ export class Api {
         });
 
         router.param('id', (req, res, next, id) => {
-            req.id = req.params.id;
+            req.id = id;
             next();
         });
 
@@ -82,7 +83,7 @@ export class Api {
             next();
         });
 
-        router.get('/:collection', asyncMW(async req => {
+        router.get('/:collection', asyncMW(async (req) => {
             const {collection, type} = req;
 
             const fields = collection.parseFields(req.query.fields);
@@ -137,6 +138,7 @@ export class Api {
                         err ? reject(err) : resolve(value);
                     });
                 });
+                req.meta = body.meta || {};
                 // @todo: return 400 on error
 
                 // req.apmeContext.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
@@ -332,38 +334,38 @@ export class Api {
                     self: urlBuilder(`${type}/${id}/relationships/${relName}`),
                     related: urlBuilder(`${type}/${id}/${relName}`)
                 }
-            }
+            };
         }));
 
-        router.patch('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            const body = await new Promise((resolve, reject) => {
+        /*router.patch('/:collection/:id/relationships/:relName', asyncMW(async req => {
+            /!*const body = await new Promise((resolve, reject) => {
                 Joi.validate(req.body, schemas.relationship, (err, value) => {
                     err ? reject(err) : resolve(value);
                 });
-            });
+            });*!/
             // @todo
             // @todo: return 400 on error
         }));
 
         router.post('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            const body = await new Promise((resolve, reject) => {
+            /!*const body = await new Promise((resolve, reject) => {
                 Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
                     err ? reject(err) : resolve(value);
                 });
-            });
+            });*!/
             // @todo
             // @todo: return 400 on error
         }));
 
         router.delete('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            const body = await new Promise((resolve, reject) => {
+            /!*const body = await new Promise((resolve, reject) => {
                 Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
                     err ? reject(err) : resolve(value);
                 });
-            });
+            });*!/
             // @todo
             // @todo: return 400 on error
-        }));
+        }));*/
 
         return router;
     }

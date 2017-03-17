@@ -53,7 +53,7 @@ export class Resource {
      */
     get exists() {
         if(this._object === undefined) {
-            throw new Error(`Try to read "exists" property of unloaded resource`);
+            throw new Error('Try to read "exists" property of unloaded resource');
         }
         return !!this._object;
     }
@@ -64,7 +64,7 @@ export class Resource {
      */
     get object() {
         if(this._object === undefined) {
-            throw new Error(`Try to read "object" property of unloaded resource`);
+            throw new Error('Try to read "object" property of unloaded resource');
         }
         return this._object;
     }
@@ -75,9 +75,9 @@ export class Resource {
     get data() {
         if(!this._object) {
             if(this._object === undefined) {
-                throw new Error(`Try to read "data" property of unloaded resource`);
+                throw new Error('Try to read "data" property of unloaded resource');
             } else {
-                throw new Error(`Try to read "data" property of resource which doesn't exist`);
+                throw new Error('Try to read "data" property of resource which doesn\'t exist');
             }
         }
         return this._object;
@@ -88,7 +88,7 @@ export class Resource {
      */
     get rels() {
         if(!this._rels) {
-            throw new Error(`Try to read "rels" property of unloaded resource`);
+            throw new Error('Try to read "rels" property of unloaded resource');
         }
         return this._rels;
     }
@@ -170,9 +170,10 @@ export class Resource {
         if(!await this.checkPermission('read') || !await this.checkPermission('update', data)) {
             throw forbiddenError();
         }
-        this._attachObject(
-            await this.context.api.collections[this.type].updateOne(this.id, data, this.context)
-        );
+        const collection = this.context.api.collections[this.type];
+        data = await collection._update(this, data, 'update');
+        this._attachObject(data);
+        await this.removeObjectCache(this.id);
         await this._loadRels();
         return this;
     }
@@ -180,13 +181,14 @@ export class Resource {
         if(!await this.checkPermission('read') || !await this.checkPermission('create', data)) {
             throw forbiddenError();
         }
-        this._attachObject(
-            await this.context.api.collections[this.type].createOne(this.id, data, this.context)
-        );
+        const collection = this.context.api.collections[this.type];
+        data = await collection._create(this, data, 'create');
+        this._attachObject(data);
         if(!this.id) {
-            this.id = this.context.api.collections[this.type].getId(this._object);
+            this.id = collection.getId(this._object);
             this.context._loadedMap.add(this); // @todo: take off in some event
         }
+        await this.removeObjectCache(this.id);
         await this._loadRels();
         return this;
     }

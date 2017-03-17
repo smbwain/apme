@@ -61,7 +61,7 @@ function makeRequest(path, opts, {expectedCode = 200} = {}) {
                 return;
             }
             resolve(body);
-        })
+        });
     });
 }
 describe('rels', () => {
