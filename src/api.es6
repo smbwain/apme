@@ -1,3 +1,14 @@
+/**
+ * @typedef {object} ResourceDefinition
+ * @param load
+ * @param loadFew
+ * @param loadList
+ * @param create(resource, data, op)
+ * @param update(resource, data, op)
+ * @param upsert(resource, data, op)
+ * @param perms
+ * @param rels
+ */
 
 import Joi from 'joi';
 
@@ -39,6 +50,10 @@ export class Api {
         this.collections = {};
     }
 
+    /**
+     * @param {string} name
+     * @param {ResourceDefinition} options
+     */
     define(name, options) {
         this.collections[name] = new Collection(this, name, options);
     }

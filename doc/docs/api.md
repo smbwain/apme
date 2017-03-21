@@ -5,8 +5,8 @@
 
 Create new resource type.
 
-- name: String - Name of resources
-- options: Object - Resource options. Possible options are [here](define/options.md)
+- name: string - Name of resources
+- options: object - Resource options
 
 ## .expressInitMiddleware()
 

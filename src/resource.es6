@@ -173,7 +173,7 @@ export class Resource {
         const collection = this.context.api.collections[this.type];
         data = await collection._update(this, data, 'update');
         this._attachObject(data);
-        await this.removeObjectCache(this.id);
+        await this.clearCache();
         await this._loadRels();
         return this;
     }
@@ -188,7 +188,7 @@ export class Resource {
             this.id = collection.getId(this._object);
             this.context._loadedMap.add(this); // @todo: take off in some event
         }
-        await this.removeObjectCache(this.id);
+        await this.clearCache();
         await this._loadRels();
         return this;
     }
