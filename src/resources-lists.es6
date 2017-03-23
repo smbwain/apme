@@ -132,7 +132,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
     }
 
     async _loadRels() {
-        const items = this.items.filter(item => !item.loaded);
+        const items = this.items.filter(item => !item._rels);
         const fields = this.context.fields[this.type];
         for(const item of items) {
             item._rels = {};
