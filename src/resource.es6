@@ -167,7 +167,7 @@ export class Resource {
         };
     }
     async update(data) {
-        if(!await this.checkPermission('read') || !await this.checkPermission('update', data)) {
+        if(!await this.checkPermission('update', data)) {
             throw forbiddenError();
         }
         const collection = this.context.api.collections[this.type];
@@ -178,7 +178,7 @@ export class Resource {
         return this;
     }
     async create(data) {
-        if(!await this.checkPermission('read') || !await this.checkPermission('create', data)) {
+        if(!await this.checkPermission('create', data)) {
             throw forbiddenError();
         }
         const collection = this.context.api.collections[this.type];

@@ -111,7 +111,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
             return this;
         }
 
-        const toLoad = this.items.filter(item => !item.loadedObject);
+        const toLoad = this.items.filter(item => !item.loaded);
         if(toLoad.length) {
             const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id), this.context);
             for(const resource of toLoad) {
@@ -132,7 +132,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
     }
 
     async _loadRels() {
-        const items = this.items.filter(item => !item.loadedRels);
+        const items = this.items.filter(item => !item.loaded);
         const fields = this.context.fields[this.type];
         for(const item of items) {
             item._rels = {};
