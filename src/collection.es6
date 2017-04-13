@@ -59,16 +59,19 @@ export class Collection {
                     const setter = d.set || ((obj, x) => {
                         obj[name] = x;
                     });
-                    setters[name] = !d.joi ? setter : (obj, x) => {
-                        const validation = d.joi.validate(x);
+                    const scheme = d.scheme || d.joi;
+                    setters[name] = !scheme ? setter : (obj, x) => {
+                        const validation = scheme.validate(x);
                         if (validation.error) {
-                            throw validation.error;
+                            throw new Error(`Field ${name}: ${validation.error.message}`);
                         }
                         setter(obj, validation.value);
                     };
                 }
 
-                getters[name] = d.get || (obj => obj[name]);
+                if(d.get !== false) {
+                    getters[name] = d.get || (obj => obj[name]);
+                }
             }
             this.packAttrs = (object) => {
                 const res = {};
