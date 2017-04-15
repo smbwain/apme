@@ -1,5 +1,6 @@
 
 import {ResourcesTypedList} from './resource';
+import {badRequestError} from './errors';
 
 export class Relationship {
     constructor(collection, name, options) {
@@ -96,10 +97,11 @@ export class Relationship {
                     };
                 } else if(options.loadObjectsOne) {
                     this.getListOne = async function (resource) {
+                        const relCollection = collection.api.collections[type];
                         const list = new ResourcesTypedList(
                             resource.context,
                             type,
-                            (await options.loadObjectsOne(resource)).map(data => resource.context.resource(type, data.id, data))
+                            (await options.loadObjectsOne(resource)).map(data => resource.context.resource(type, relCollection.getId(data), data))
                         );
                         await list.load();
                         return list;
