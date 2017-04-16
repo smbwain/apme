@@ -233,9 +233,10 @@ export class ResourceTypedQuery extends ResourcesTypedList {
         if(this.loaded) {
             return this;
         }
-        const loaded = await this.context.api.collections[this.type].loadList(this.params, this.context);
+        const collection = this.context.api.collections[this.type];
+        const loaded = await collection.loadList(this.params, this.context);
         this.items = loaded.items.map(object => {
-            return this.context.resource(this.type, object.id, object);
+            return this.context.resource(this.type, collection.getId(object), object);
         });
         this.meta = loaded.meta;
         this.loaded = true;

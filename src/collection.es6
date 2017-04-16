@@ -280,12 +280,12 @@ export class Collection {
         const loaded = await this._loadList({filter, page, sort}, context);
         const few = {};
         for (const item of loaded.items) {
-            few[item.id] = item;
+            few[this.getId(item)] = item;
         }
         await this._cache.mset(`${this.type}:o:`, few);
         await this._cache.set(`${this.type}:l:`, cacheKey, {
             meta: loaded.meta,
-            ids: loaded.items.map(item => item.id),
+            ids: loaded.items.map(this.getId),
             ts: now
         });
         return loaded;

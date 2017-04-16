@@ -2,10 +2,11 @@
 export {Api} from './api';
 export {jsonErrorHandler} from './errors';
 export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from './cache';
-export function group(arr) {
+export function group(arr, field = 'id') {
+    const getter = (typeof field == 'function') ? field : data => data[field];
     const map = {};
     for(const item of arr) {
-        map[item.id] = item;
+        map[getter(item)] = item;
     }
     return map;
 }
