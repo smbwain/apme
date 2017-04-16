@@ -54,8 +54,8 @@ describe('basic crud', () => {
             },
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
-            updateOne: async (id, data) => {
-                const index = users.findIndex(user => user.id == id);
+            update: async (res, data) => {
+                const index = users.findIndex(user => user.id == res.id);
                 if(index == -1) {
                     return null;
                 }
@@ -66,8 +66,8 @@ describe('basic crud', () => {
                 return users[index];
             },
             passId: true,
-            createOne: async (id, data) => {
-                users.push({id, ...data});
+            create: async (res, data) => {
+                users.push({id: res.id, ...data});
                 return data;
             },
             removeOne: async id => {

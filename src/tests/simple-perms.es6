@@ -45,8 +45,8 @@ describe('simple perms', () => {
         api.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
-            updateOne: async (id, data) => {
-                const index = users.findIndex(user => user.id == id);
+            update: async (res, data) => {
+                const index = users.findIndex(user => user.id == res.id);
                 if(index == -1) {
                     return null;
                 }
@@ -57,8 +57,8 @@ describe('simple perms', () => {
                 return users[index];
             },
             passId: true,
-            createOne: async (id, data) => {
-                users.push({id, ...data});
+            create: async (res, data) => {
+                users.push({id: res.id, ...data});
                 return data;
             },
             removeOne: async id => {
@@ -70,10 +70,12 @@ describe('simple perms', () => {
                 return true;
             },
             perms: {
-                read: context => {
-                    return !!(context.req && context.req.user);
+                read: {
+                    byContext: context => {
+                        return !!(context.req && context.req.user);
+                    }
                 },
-                writeOne: resource => {
+                write: resource => {
                     return !!(resource.context.req && resource.context.req.user && (resource.context.req.user.id == '999' || resource.context.req.user.id == resource.id));
                 }
             }

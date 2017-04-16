@@ -63,7 +63,7 @@ export class Collection {
                     setters[name] = !scheme ? setter : (obj, x) => {
                         const validation = scheme.validate(x);
                         if (validation.error) {
-                            throw new Error(`Field ${name}: ${validation.error.message}`);
+                            throw new Error(`Field "${name}": ${validation.error.message}`);
                         }
                         setter(obj, validation.value);
                     };
