@@ -55,7 +55,7 @@ export class Relationship {
             }
         } else if(options.toMany) {
             this.toOne = false;
-            if(options.toOne == '*') {
+            if(options.toMany == '*') {
                 throw new Error('Not implemented');
             } else {
                 const type = options.toMany;

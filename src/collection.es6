@@ -3,11 +3,78 @@ import {methodNotAllowedError, badRequestError} from './errors';
 import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
 import {Relationship} from './relationship';
+import Joi from 'joi';
+
+const optionsScheme = Joi.object()
+    .keys({
+        cache: Joi.object(),
+        fields: Joi.object().pattern(/.*/, Joi.object().keys({
+            set: Joi.alternatives().try(
+                Joi.func(),
+                Joi.boolean().only(false)
+            ),
+            get: Joi.alternatives().try(
+                Joi.func(),
+                Joi.boolean().only(false)
+            ),
+            schema: Joi.object(),
+            joi: Joi.object()
+        })),
+        packAttrs: Joi.func(),
+        unpackAttrs: Joi.func(),
+        perms: Joi.object().pattern(/^read|write|create|update|remove|any$/, Joi.alternatives().try(
+            Joi.func(),
+            Joi.object().keys({
+                byContext: Joi.func().required()
+            })
+        )),
+        filter: Joi.object().keys({
+            schema: Joi.object()
+        }),
+        getId: Joi.func(),
+        generateId: Joi.func(),
+        passId: Joi.boolean().default(false),
+        loadOne: Joi.func(),
+        loadFew: Joi.func(),
+        loadList: Joi.func(),
+        update: Joi.func(),
+        create: Joi.func(),
+        upsert: Joi.func(),
+        removeOne: Joi.func(),
+        rels: Joi.object().pattern(
+            /.*/,
+            Joi.alternatives().try(
+                Joi.object().keys({
+                    toOne: Joi.string().required(),
+                    getIdOne: Joi.func(),
+                    getFilterOne: Joi.func(),
+                    setIdOne: Joi.func()
+                }).xor('getIdOne', 'getFilterOne'),
+                Joi.object().keys({
+                    toMany: Joi.string().required(),
+                    getIdsOne: Joi.func(),
+                    getFilterOne: Joi.func(),
+                    setIdsOne: Joi.func()
+                }).xor('getIdsOne', 'getFilterOne')
+            )
+        ),
+        listCacheInvalidateKeys: Joi.any()
+    })
+    .without('upsert', ['update', 'create'])
+    .without('fields', ['packAttrs', 'unpeckAttrs']);
 
 export class Collection {
     constructor(api, type, options) {
         this.api = api;
         this.type = type;
+
+        {
+            const validate = optionsScheme.validate(options);
+            if(validate.error) {
+                throw validate.error;
+            }
+            options = validate.value;
+        }
 
         // load one
         if(options.loadOne) {
@@ -59,9 +126,9 @@ export class Collection {
                     const setter = d.set || ((obj, x) => {
                         obj[name] = x;
                     });
-                    const scheme = d.scheme || d.joi;
-                    setters[name] = !scheme ? setter : (obj, x) => {
-                        const validation = scheme.validate(x);
+                    const schema = d.schema || d.joi;
+                    setters[name] = !schema ? setter : (obj, x) => {
+                        const validation = schema.validate(x);
                         if (validation.error) {
                             throw new Error(`Field "${name}": ${validation.error.message}`);
                         }
@@ -157,6 +224,8 @@ export class Collection {
             read: wrapPerm(perms, ['read', 'any'])
         };
 
+        this._filter = options.filter || {};
+
         // relationships
         this.rels = {};
         for(const relName in options.rels || {}) {
@@ -247,6 +316,13 @@ export class Collection {
     }
 
     async loadList({filter, page, sort}, context) {
+        if(this._filter.schema) {
+            const validation = this._filter.schema.validate(filter);
+            if (validation.error) {
+                throw new Error(`Filter validation: ${validation.error.message}`);
+            }
+            filter = validation.value;
+        }
         if(!this._cache) {
             return await this._loadList({filter, page, sort}, context);
         }
