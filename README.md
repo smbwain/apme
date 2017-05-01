@@ -2,10 +2,8 @@ apme
 ====
 
 ```
-Alpha testing
-@todo: make api stable
-@todo: make documentation
-@todo: write more tests to cover all features
+Beta
+@todo: full documentation
 ```
 
 Jsonapi server library with validation, relationships and caching on the board.
