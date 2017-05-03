@@ -14,6 +14,7 @@ import Joi from 'joi';
 
 import {Collection} from './collection';
 import {Context} from './context';
+import {validate} from './validate';
 import {badRequestError, notFoundError} from './errors';
 import asyncMW from 'async-mw';
 import querystring from 'querystring';
@@ -42,8 +43,35 @@ const schemas = {};
         }),
         meta: Joi.object()
     });
+    schemas.fields = Joi.object().pattern(/.*/, Joi.string());
+    schemas.include = Joi.string();
 }
 
+function parseFields(fields) {
+    const res = {};
+    if(fields) {
+        validate(fields, schemas.fields, 'Fields validation');
+        for (const collectionName in fields) {
+            res[collectionName] = new Set(fields[collectionName].split(','));
+        }
+    }
+    return res;
+}
+
+function parseInclude(includeString) {
+    if(!includeString) {
+        return null;
+    }
+    validate(includeString, schemas.include, 'Include validation');
+    const res = {};
+    for(const includeElement of includeString.split(',')) {
+        let curObj = res;
+        for(const current of includeElement.split('.')) {
+            curObj = curObj[current] || (curObj[current] = {});
+        }
+    }
+    return res;
+}
 
 export class Api {
     constructor() {
@@ -60,6 +88,25 @@ export class Api {
 
     context(options) {
         return new Context(this, options);
+    }
+
+    /**
+     * @param {Object.<string, Iterable.<string>>} fields
+     */
+    validateFields(fields) {
+        for(const collectionName in fields) {
+            const collection = this.collections[collectionName];
+            if(!collection) {
+                throw badRequestError(`Unknown collection ${collectionName}`);
+            }
+            if(collection.fieldsSetToGet) {
+                for(const fieldName of fields[collectionName]) {
+                    if(!collection.fieldsSetToGet.has(fieldName)) {
+                        throw badRequestError(`Unknown attribute or relationship "${collectionName}"."${fieldName}"`);
+                    }
+                }
+            }
+        }
     }
 
     expressInitMiddleware() {
@@ -98,20 +145,25 @@ export class Api {
             next();
         });
 
-        router.get('/:collection', asyncMW(async (req) => {
-            const {collection, type} = req;
+        const parseFieldsMiddleware = (req, res, next) => {
+            const fields = parseFields(req.query.fields);
+            this.validateFields(fields);
+            req.apmeContext.fields = fields;
 
-            const fields = collection.parseFields(req.query.fields);
-            const filter = req.query.filter;
-            const include = req.collection.parseInclude(req.query.include);
-            const sort = req.collection.parseSort(req.query.sort);
-            const page = req.query.page;
+            req.include = parseInclude(req.query.include);
+            next();
+        };
+
+        router.get('/:collection', parseFieldsMiddleware, asyncMW(async (req) => {
+            const {type} = req;
+
+            const {filter, sort, page} = req.query;
 
             const list = await req.apmeContext.list(type, {sort, page, filter}).load();
-            const included = (await list.include(include)).packItems(fields, urlBuilder);
+            const included = (await list.include(req.include)).packItems(urlBuilder);
 
             return {
-                data: list.packItems(fields, urlBuilder),
+                data: list.packItems(urlBuilder),
                 meta: list.meta,
                 included: included.length ? included : undefined,
                 links: {
@@ -129,13 +181,13 @@ export class Api {
                 throw notFoundError();
             }
 
-            const fields = collection.parseFields(req.query.fields);
-            const include = req.collection.parseInclude(req.query.include);
+            const fields = parseFields(req.query.fields);
+            const include = parseInclude(req.query.include);
 
-            const included = (await resource.include(include)).packItems(fields, urlBuilder);
+            const included = (await resource.include(include)).packItems(urlBuilder);
 
             return {
-                data: resource.pack(fields[type], urlBuilder),
+                data: resource.pack(urlBuilder),
                 included: included.length ? included : undefined,
                 links: {
                     self: urlBuilder(`${type}/${id}`, req.query)
@@ -155,8 +207,6 @@ export class Api {
                 });
                 req.meta = body.meta || {};
                 // @todo: return 400 on error
-
-                // req.apmeContext.include = req.query.include ? parseInclude(req.query.include) : req.collection.include;
 
                 // check type
                 if(body.data.type && body.data.type != req.type) {
@@ -211,13 +261,13 @@ export class Api {
                     await resource.create(data);
                 }
 
-                const fields = collection.parseFields(req.query.fields);
-                const include = req.collection.parseInclude(req.query.include);
+                const fields = parseFields(req.query.fields);
+                const include = parseInclude(req.query.include);
 
-                const included = (await resource.include(include)).packItems(fields, urlBuilder);
+                const included = (await resource.include(include)).packItems(urlBuilder);
 
                 return {
-                    data: resource.pack(fields[resource.type], urlBuilder),
+                    data: resource.pack(urlBuilder),
                     included: included.length ? included : undefined,
                     links: {
                         self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
@@ -254,7 +304,7 @@ export class Api {
                 throw notFoundError();
             }
 
-            const fields = collection.parseFields(req.query.fields);
+            const fields = parseFields(req.query.fields);
 
             let data = null;
             if(rel.toOne) {
@@ -262,13 +312,13 @@ export class Api {
                 if(resource) {
                     await resource.load();
                     if(resource.exists) {
-                        data = resource.pack(fields[resource.type], urlBuilder);
+                        data = resource.pack(urlBuilder);
                     }
                 }
             } else {
                 const list = await rel.getListOne(mainResource);
                 await list.load();
-                data = list.packItems(fields, urlBuilder);
+                data = list.packItems(urlBuilder);
             }
 
             // @todo: add included

@@ -8,8 +8,8 @@ export class AbstractResourcesList {
         this.items = items;
         this.loaded = false;
     }
-    packItems(fields = {}, urlBuilder) {
-        return this.items.map(resource => resource.pack(fields[resource.type], urlBuilder));
+    packItems(urlBuilder) {
+        return this.items.map(resource => resource.pack(urlBuilder));
     }
     push(resource) {
         this.items.push(resource);

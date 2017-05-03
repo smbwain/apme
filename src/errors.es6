@@ -1,6 +1,6 @@
 
-export function validationError(validationError) {
-    const err = new Error('Validation error');
+export function validationError(validationError, text) {
+    const err = new Error(`${text || 'Validation error'}: ${validationError.message}`);
     err.validation = validationError;
     err.httpCode = 400;
     return err;

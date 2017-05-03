@@ -4,6 +4,7 @@ import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
 import {Relationship} from './relationship';
 import Joi from 'joi';
+import {validate} from './validate';
 
 const optionsScheme = Joi.object()
     .keys({
@@ -117,6 +118,7 @@ export class Collection {
         this._cache = options.cache;
 
         if(options.fields) {
+            this.fieldsSetToGet = new Set();
             const setters = {};
             const getters = {};
             for(const name in options.fields) {
@@ -138,12 +140,15 @@ export class Collection {
 
                 if(d.get !== false) {
                     getters[name] = d.get || (obj => obj[name]);
+                    this.fieldsSetToGet.add(name);
                 }
             }
-            this.packAttrs = (object) => {
+            this.packAttrs = (object, fieldsSet) => {
                 const res = {};
                 for(const name in getters) {
-                    res[name] = getters[name](object);
+                    if(!fieldsSet || fieldsSet.has(name)) {
+                        res[name] = getters[name](object);
+                    }
                 }
                 return res;
             };
@@ -225,14 +230,14 @@ export class Collection {
         };
 
         this._filter = options.filter || {};
+        this._sort = options.sort || {};
+        this._page = options.page || {};
 
         // relationships
         this.rels = {};
         for(const relName in options.rels || {}) {
             this.rels[relName] = new Relationship(this, relName, options.rels[relName]);
         }
-
-        this.defaultInclude = options.defaultInclude;
 
         // (context, data, oldData, operation)
 
@@ -316,13 +321,10 @@ export class Collection {
     }
 
     async loadList({filter, page, sort}, context) {
-        if(this._filter.schema) {
-            const validation = this._filter.schema.validate(filter);
-            if (validation.error) {
-                throw new Error(`Filter validation: ${validation.error.message}`);
-            }
-            filter = validation.value;
-        }
+        filter = validate(filter, this._filter.schema, 'Filter validation');
+        page = validate(page, this._page.schema, 'Page validation');
+        sort = validate(sort, this._sort.schema, 'Sort validation');
+
         if(!this._cache) {
             return await this._loadList({filter, page, sort}, context);
         }
@@ -386,37 +388,9 @@ export class Collection {
         }
     }
 
-    parseFields(fields) {
-        // @todo
-        return [];
-    }
-
     parseSort(sort) {
         // @todo
         return null;
-    }
-
-    parseInclude(includeString) {
-        if(!includeString) {
-            includeString = this.defaultInclude;
-        }
-
-        if(!includeString) {
-            return null;
-        }
-
-        // @todo: validate it
-        const obj = {};
-        /*function bld(curObj, path, i) {
-            curObj[path[i]] || (curObj[path[i]] = {});
-        }*/
-        for(const includeElement of includeString.split(',')) {
-            let curObj = obj;
-            for(const current of includeElement.split('.')) {
-                curObj = curObj[current] || (curObj[current] = {});
-            }
-        }
-        return obj;
     }
 
     async setInvalidate(keys) {

@@ -2,7 +2,7 @@
 import {forbiddenError, notFoundError} from './errors';
 import {ResourcesTypedList} from './resources-lists';
 
-function filterFields(obj, fields) {
+/*function filterFields(obj, fields) {
     if(!fields) {
         return obj;
     }
@@ -11,7 +11,7 @@ function filterFields(obj, fields) {
         res[name] = obj[name];
     }
     return res;
-}
+}*/
 
 export class Resource {
     constructor(context, type, id, object) {
@@ -125,12 +125,12 @@ export class Resource {
             }
         }
     }
-    pack(fields, urlBuilder) {
+    pack(urlBuilder) {
         const collection = this.context.api.collections[this.type];
         const data = {
             id: this.id,
             type: this.type,
-            attributes: filterFields(collection.packAttrs(this.object), fields),
+            attributes: collection.packAttrs(this.data, this.context.fields[this.type]),
             /*links: {
                 self: urlBuilder(`${this.type}/${this.id}`)
             }*/
@@ -138,9 +138,9 @@ export class Resource {
         if(Object.keys(collection.rels).length) {
             data.relationships = {};
             for(const relName in collection.rels) {
-                if(fields && !fields[relName]) {
+                /*if(fields && !fields[relName]) {
                     continue;
-                }
+                }*/
                 const relData = this.rels[relName];
                 if(relData === undefined) {
                     throw new Error(`No relationship data ${this.type}:${relName}`);

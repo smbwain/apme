@@ -8,8 +8,19 @@ export class Context {
         this.req = req;
         this.privileged = privileged;
         this._loadedMap = new ResourcesMap();
-        this.fields = {};
+        this.fields = fields;
         this.meta = {};
+    }
+
+    /**
+     * @param {Object.<string, Iterable.<string>>} fields
+     */
+    forceFields(fields) {
+        for(const collectionName in fields) {
+            if(this.fields[collectionName]) {
+                this.fields[collectionName] = new Set([...this.fields[collectionName], ...fields[collectionName]]);
+            }
+        }
     }
 
     setMeta(updates) {

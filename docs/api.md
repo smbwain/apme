@@ -16,11 +16,12 @@ Return express router, which could be used as express middleware in app.use meth
 
 - options: Object = {}
     - url: string = "/" - Url to your api endpoint.
+    
         It will be added to links in responses, so it's better to provide absolute url.
 
 ## .context(options)
 
-Create new apme context. Context allow you to make actions on resources.
+Create new apme context. Context allows you to make requests.
 
 __Usually you shouldn't call this method manually when you use express. Use _req.apmeContext_ instead.__
 
@@ -35,7 +36,7 @@ returns: Context
 ## .resource(type, id)
 
 Get resource instance. Each resource instance for each context will be created once.
-If you try to retrieve resource with the same type and id with that context next time, you'll get the same instance.
+If you try to retrieve resource with the same type and id for the same context more than once, you'll still get the same instance.
 
 - type: String
 - id: String
