@@ -27,7 +27,8 @@ const optionsScheme = Joi.object()
             Joi.func(),
             Joi.object().keys({
                 byContext: Joi.func().required()
-            })
+            }),
+            Joi.boolean()
         )),
         filter: Joi.object().keys({
             schema: Joi.object()
