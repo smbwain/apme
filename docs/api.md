@@ -1,29 +1,25 @@
+<a name="apme"></a>
+# 3.1. Apme
 
-# Api
+<a name="apme-define"></a>
+## 3.1.1. apme.define(name, options)
 
-## .define(name, options)
+Create new collection.
 
-Create new resource type.
+- name: string - name of collection
+- options: object - collection options ([see define options section](define.md))
 
-- name: string - Name of resources
-- options: object - Resource options
+<a name="apme-use"></a>
+## 3.1.2. apme.context(options)
 
-## .expressInitMiddleware()
+<a name="apme-context"></a>
+## 3.1.3. apme.context(options)
 
-## .expressJsonApiRouter(options)
+Create new apme [Context](#Context).
 
-Return express router, which could be used as express middleware in app.use method.
-
-- options: Object = {}
-    - url: string = "/" - Url to your api endpoint.
-    
-        It will be added to links in responses, so it's better to provide absolute url.
-
-## .context(options)
-
-Create new apme context. Context allows you to make requests.
-
-__Usually you shouldn't call this method manually when you use express. Use _req.apmeContext_ instead.__
+> Usually you shouldn't call this method manually.
+  If you use express 
+  When you use express. Use _req.apmeContext_ instead.
 
 - options: object = {}
     - req
@@ -31,120 +27,170 @@ __Usually you shouldn't call this method manually when you use express. Use _req
     
 returns: Context
 
-# Context
+<a name="Context"></a>
+# 3.2. Context
 
-## .resource(type, id)
+Context allows you to make data requests.
 
-Get resource instance. Each resource instance for each context will be created once.
+Usually context is created and associated with user request. Context has own cache, so the same resources won't be loaded more than once during user request.
+
+<a name="Context-resource"></a>
+## 3.2.1. context.resource()
+
+```js
+context.resource(type, id)
+```
+
+Get resource instance. Each resource instance will be created once for each context.
 If you try to retrieve resource with the same type and id for the same context more than once, you'll still get the same instance.
 
-- type: String
-- id: String
+* type: string
+* id: string
+* returns [Resource](#Resource)
 
-Returns: Resource
+<a name="Context-resources"></a>
+## 3.2.2. context.resources()
 
-## .resources(type, ids)
+```js
+context.resources(type, ids)
+```
 
 Get list of resources by type and ids.
 
-- type: String
-- id: Array\<String>
+* type: string
+* id: array<string\>
+* returns [ResourcesTypedList](#ResourcesTypedList)
 
-## .list(type, options)
+<a name="Context-list"></a>
+## 3.2.3. context.list()
+
+```js
+context.list(type, options)
+```
 
 Create list of resource instances.
 
-- type: string
-- options: object = {}
-    - filter: object
-    - page: object
-    - sort: object
-    - fields: object
-    
-Returns: ResourcesTypedQuery
+* type: string
+* options: object = {}
+    * filter: object
+    * page: object
+    * sort: object
+    * fields: object
+* returns [ResourceTypedQuery](#ResourceTypedQuery)
 
-## .setInvalidate(type, keys)
+<a name="Context-setInvalidate"></a>
+## 3.2.4. context.setInvalidate()
 
-## .packRefData(value)
+```js
+context.setInvalidate(type, keys)
+```
 
-# Resource
+* type: string
+* keys: array<string\>
 
-## .type: String
+<a name="Resource"></a>
+# 3.3. Resource
 
-## .id: String
+<a name="Resource-type"></a>
+## 3.3.1. resource.type
 
-## .load()
+<a name="Resource-id"></a>
+## 3.3.2. resource.id
+
+<a name="Resource-load"></a>
+## 3.3.3. resource.load()
 
 Load resource data and resource relationships.
 If data and relationships are loaded, this method do nothing.
  
 Returns promise which resolves with current resource.
-Returns: Promise\<Resource>
+Returns: Promise<[Resource](#Resource)\>
 
-## .data: object
+<a name="Resource-data"></a>
+## 3.3.4. resource.data
+
 Row data
 Throws error, if resource isn't loaded or doesn't exist.
 
-## .object: mixed
-
-Row data of resource instance.
-It's null for unexisting object.
-
-## .loaded: boolean
+<a name="Resource-loaded"></a>
+## 3.3.5. resource.loaded
 
 Does resource loaded.
 
-## .exists: boolean
+<a name="Resource-exists"></a>
+## 3.3.6 resource.exists
 
 Does resource exist.
 This property could be read only for loaded resource.
 
-## .pack(fieldSet)
+<a name="Resource-update"></a>
+## 3.3.7. resource.update()
 
-- fieldSet: Set\<String\>
+```js
+resource.update(data)
+```
 
-Returns: object
+* data: object
+* returns Promise<[Resource](#Resource)\>
 
-## .update(data)
+<a name="Resource-create"></a>
+## 3.3.8. resource.create()
 
-Returns: Promise\<Resource>
+```js
+resource.create(data)
+```
 
-## .create(data)
+* data: object
+* returns Promise<[Resource](#Resource)\>
 
-Returns: Promise\<Resource>
+<a name="Resource-remove"></a>
+## 3.3.9. resource.remove()
 
-## .remove()
+```js
+resource.remove()
+```
 
-Returns: Promise
+* returns Promise
 
-## .include(includeTree)
+<a name="Resource-include"></a>
+## 3.3.10. resource.include()
 
-Returns: Promise\<ResourcesMixedList>
+```js
+resource.include(includeTree)
+```
 
-## .checkPermission(operation)
+* includeTree: object
+* returns Promise<[ResourcesMixedList](#ResourcesMixedList)\>
 
-Returns: Promise\<Boolean>
+<a name="lists"></a>
+# 3.4. Lists
 
-# ResourcesList
+<a name="AbstractResourcesList"></a>
+## 3.4.1. AbstractResourcesList
 
-## .load()
+### 3.4.1.1. list.load()
 
-Returns: Promise\<ResourceList>
+### 3.4.1.2. list.items
 
-## .loaded: boolean
+### 3.4.1.3. list.loaded
 
-## .push(resource)
+### 3.4.1.4. list.include()
 
-## .packItems(fieldLists: Object\<Set\<String>>): Array\<Object>
+```js
+list.include(includeTree)
+```
 
-## .checkPermission(operation): Promise\<Boolean>
+* includeTree: object
+* returns [ResourcesMixedList](#ResourcesMixedList)
 
-# ResourcesTypedList: ResourcesList
+<a name="ResourceTypedQuery"></a>
+## 3.4.2. ResourceTypedQuery
 
-## type: String
+### 3.4.2.1. list.type
 
-# ResourcesMixedList: ResourcesList
+<a name="ResourceTypedQuery"></a>
+## 3.4.3. ResourceTypedQuery
 
-# ResourcesTypedQuery: ResourcesTypedList
+<a name="ResourcesMixedList"></a>
+## 3.4.4. ResourcesMixedList
 
-## params: Object

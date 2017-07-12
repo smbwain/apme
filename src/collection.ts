@@ -3,8 +3,14 @@ import {methodNotAllowedError, badRequestError} from './errors';
 import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
 import {Relationship} from './relationship';
-import Joi from 'joi';
+import * as Joi from 'joi';
 import {validate} from './validate';
+import {TObjectData, TListParams, TSchema, ResourceDefinition} from './types';
+import {Context} from "./context";
+import {Apme} from './apme';
+import {Resource} from './resource';
+import {Cache} from './cache';
+import {ResourcesTypedList} from "./resources-lists";
 
 const optionsScheme = Joi.object()
     .keys({
@@ -42,7 +48,7 @@ const optionsScheme = Joi.object()
         update: Joi.func(),
         create: Joi.func(),
         upsert: Joi.func(),
-        removeOne: Joi.func(),
+        remove: Joi.func(),
         rels: Joi.object().pattern(
             /.*/,
             Joi.alternatives().try(
@@ -66,8 +72,40 @@ const optionsScheme = Joi.object()
     .without('fields', ['packAttrs', 'unpeckAttrs']);
 
 export class Collection {
-    constructor(api, type, options) {
-        this.api = api;
+    public apme : Apme;
+    public type : string;
+    private _listCacheInvalidateKeys : (params: {filter: any, sort: any, page: any}) => string[];
+    private _cache : Cache;
+    public fieldsSetToGet : Set<string>;
+    // private _loadOne : (id : string, context : IContext) => Promise<TObjectData>;
+    // private _loadFew : (ids : string[], context : IContext) => Promise<{[key : string]: TObjectData}>;
+    public packAttrs : (object : TObjectData, fieldsSet : Set<string>) => {[attrName: string]: any};
+    public unpackAttrs : (data : {[attrName: string]: any}, patch: boolean) => TObjectData;
+    private _update : (resource: Resource, options: {data: TObjectData, context: Context, op: string}) => Promise<TObjectData>;
+    private _create : (resource: Resource, options: {data: TObjectData, context: Context, op: string}) => Promise<TObjectData>;
+    private _remove : (resource: Resource, options: {context: Context}) => Promise<boolean>;
+    public getId : (ObjectData) => string;
+    public generateId : (data : TObjectData, context : Context) => string;
+    public passId : boolean | ((context : Context, id : string) => boolean);
+    public perms : { // @todo: make it private
+        create: any,
+        update: any,
+        remove: any,
+        read: any
+    };
+    private _filter?: {
+        schema?: TSchema
+    };
+    private _sort?: {
+        schema?: TSchema
+    };
+    private _page? : {
+        schema?: TSchema
+    };
+    public rels : {[name: string] : Relationship};
+
+    constructor(apme : Apme, type : string, options : ResourceDefinition) {
+        this.apme = apme;
         this.type = type;
 
         {
@@ -135,7 +173,7 @@ export class Collection {
                         if (validation.error) {
                             throw new Error(`Field "${name}": ${validation.error.message}`);
                         }
-                        setter(obj, validation.value);
+                        (setter as (ObjectData: any, value: any) => void)(obj, validation.value);
                     };
                 }
 
@@ -184,9 +222,9 @@ export class Collection {
         this._create = options.create || options.upsert || function() {
             throw new Error('Method not allowed');
         };
-        this.removeOne = options.removeOne ? async (id, context) => {
-            const object = await options.removeOne(id, context);
-            await this.removeObjectCache(id);
+        this._remove = options.remove ? async (resource, {context}) => {
+            const object = await options.remove(resource, {context});
+            await this.removeObjectCache(resource.id);
             return object;
         } : function() {
             throw new Error('Method not allowed');
@@ -272,56 +310,36 @@ export class Collection {
                 }));
             }
         }
-        this.api = api;*/
+        this.apme = apme;*/
     }
 
-    /**
-     * Load single instance raw data
-     * @param {string} id
-     * @param {Context} context
-     * @returns {Promise.<Resource|null>}
-     */
-    loadOne(id, context) {
+    loadOne(id : string, context : Context) : Promise<Resource> {
         if(!this._cache) {
             return this._loadOne(id, context);
         }
-        return this._cache.load(`${this.type}:o:`, id, () => (
+        return this._cache.load(`${this.type}:o:`, id, {}, () => (
             this._loadOne(id, context)
         ));
     }
 
-    /**
-     * Load single instance raw data (without using cache)
-     * @private
-     */
-    async _loadOne() {
+    private async _loadOne(id: string, context: Context) : Promise<Resource> {
         throw methodNotAllowedError();
     }
 
-    /**
-     * Load few instances raw data
-     * @param {[string]} ids
-     * @param {Context} context
-     * @returns {Promise.<Object.<Resource>>}
-     */
-    loadFew(ids, context) {
+    loadFew(ids : string[], context : Context) : Promise<{[id: string] : Resource}> {
         if(!this._cache) {
             return this._loadFew(ids, context);
         }
-        return this._cache.mload(`${this.type}:o:`, ids, rest => {
-            return this._loadFew(rest, context);
+        return this._cache.mload(`${this.type}:o:`, ids, {}, async rest => {
+            return await this._loadFew(rest, context);
         });
     }
 
-    /**
-     * Load few instances raw data (without using cache)
-     * @private
-     */
-    async _loadFew() {
+    private _loadFew(ids: string[], context: Context) : Promise<{[id: string]: TObjectData}> {
         throw methodNotAllowedError();
     }
 
-    async loadList({filter, page, sort}, context) {
+    async loadList({filter, page, sort} : TListParams, context : Context) : Promise<{items: Array<TObjectData>, meta?: any}> {
         filter = validate(filter, this._filter.schema, 'Filter validation');
         page = validate(page, this._page.schema, 'Page validation');
         sort = validate(sort, this._sort.schema, 'Sort validation');
@@ -370,8 +388,39 @@ export class Collection {
         return loaded;
     }
 
-    async _loadList() {
+    _loadList(params: TListParams, context: Context) : Promise<{items: Array<TObjectData>, meta?: any}> {
         throw methodNotAllowedError();
+    }
+
+    /**
+     * Low level method
+     */
+    update(resource: Resource, data: TObjectData) : Promise<TObjectData> {
+        return this._update(resource, {
+            data,
+            context: resource.context,
+            op: 'update'
+        });
+    };
+
+    /**
+     * Low level method
+     */
+    create(resource: Resource, data: TObjectData) : Promise<TObjectData> {
+        return this._create(resource, {
+            data,
+            context: resource.context,
+            op: 'create'
+        });
+    }
+
+    /**
+     * Low level method
+     */
+    remove(resource: Resource) : Promise<boolean> {
+        return this._remove(resource, {
+            context: resource.context
+        });
     }
 
     async removeObjectCache(id) {

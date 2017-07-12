@@ -1,15 +1,24 @@
 
 import {Resource, ResourcesMap} from './resource';
 import {AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resources-lists';
+import {ContextOptions, TListParams} from './types';
+import {Apme} from './apme';
 
-export class Context {
-    constructor(api, {req, privileged = false, fields = {}, meta = {}}) {
-        this.api = api;
+export class Context /*implements ContextInterface*/ {
+    public meta : {
+        [key: string]: any
+    } = {};
+    public apme : Apme;
+    public req : any;
+    public privileged : boolean;
+    public loadedMap : ResourcesMap = new ResourcesMap();
+    public fields;
+
+    constructor(apme : Apme, {req, privileged = false, fields = {}, meta = {}} : ContextOptions) {
+        this.apme = apme;
         this.req = req;
         this.privileged = privileged;
-        this._loadedMap = new ResourcesMap();
         this.fields = fields;
-        this.meta = {};
     }
 
     /**
@@ -30,14 +39,14 @@ export class Context {
         };
     }
 
-    resource(type, id, object) {
+    resource(type : string, id : string, object? : any) : Resource {
         if(!id) {
             return new Resource(this, type, null);
         }
-        let resource = this._loadedMap.get(type, id);
+        let resource = this.loadedMap.get(type, id);
         if(!resource) {
             resource = new Resource(this, type, id);
-            this._loadedMap.add(resource);
+            this.loadedMap.add(resource);
         }
         if(object) {
             resource._attachObject(object);
@@ -45,29 +54,17 @@ export class Context {
         return resource;
     }
 
-    resources(type, ids) {
+    resources(type : string, ids : string[]) : ResourcesTypedList {
         return new ResourcesTypedList(this, type, ids.map(id => this.resource(type, id)));
     }
 
     // resources
 
-    list(type, params) {
+    list(type : string, params : TListParams) : ResourceTypedQuery {
         return new ResourceTypedQuery(this, type, params);
     }
 
-    async setInvalidate(type, keys) {
-        await this.api.collections[type].setInvalidate(keys);
-    }
-
-    packRefData(value) {
-        if(value instanceof Resource) {
-            return value.packRef();
-        } else if(value instanceof AbstractResourcesList) {
-            return value.items.map(resource => resource.packRef());
-        } else if(value === null) {
-            return null;
-        } else {
-            throw new Error();
-        }
+    async setInvalidate(type : string, keys : string[]) : Promise<void> {
+        await this.apme.collections[type].setInvalidate(keys);
     }
 }

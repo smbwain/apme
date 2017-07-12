@@ -1,6 +1,8 @@
 
 import {forbiddenError, notFoundError} from './errors';
-import {ResourcesTypedList} from './resources-lists';
+import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
+import {Collection} from "./collection";
+import {Context} from './context';
 
 /*function filterFields(obj, fields) {
     if(!fields) {
@@ -13,13 +15,20 @@ import {ResourcesTypedList} from './resources-lists';
     return res;
 }*/
 
-export class Resource {
-    constructor(context, type, id, object) {
+export class Resource /*implements ResourceInterface*/ {
+    public context : Context;
+    public type : string;
+    public id : string;
+    private _object : any;
+    public _rels : {
+        [name: string]: Resource | AbstractResourcesList
+    } = null;
+
+    constructor(context, type, id, object?) {
         this.context = context;
         this.type = type;
         this.id = id;
         this._object = object;
-        this._rels = null;
     }
     _attachObject(object) {
         this._object = object;
@@ -98,7 +107,7 @@ export class Resource {
      */
     async load({mustExist = false} = {}) {
         if(this._object === undefined) {
-            const collection = this.context.api.collections[this.type];
+            const collection = this.context.apme.collections[this.type];
             const data = (await collection.loadOne(this.id, this.context));
             if(!data && mustExist) {
                 throw notFoundError();
@@ -115,63 +124,22 @@ export class Resource {
     }
 
     async _loadRels() {
-        const collection = this.context.api.collections[this.type];
+        const collection = this.context.apme.collections[this.type];
         const fields = this.context.fields[this.type];
         this._rels = {};
         for(const relName in collection.rels) {
             if(!fields || fields.has(relName)) {
-                const rel = this.context.api.collections[this.type].rels[relName];
+                const rel = this.context.apme.collections[this.type].rels[relName];
                 this._rels[relName] = await rel.getOne(this);
             }
         }
-    }
-    pack(urlBuilder) {
-        const collection = this.context.api.collections[this.type];
-        const data = {
-            id: this.id,
-            type: this.type,
-            attributes: collection.packAttrs(this.data, this.context.fields[this.type]),
-            /*links: {
-                self: urlBuilder(`${this.type}/${this.id}`)
-            }*/
-        };
-        if(Object.keys(collection.rels).length) {
-            data.relationships = {};
-            for(const relName in collection.rels) {
-                /*if(fields && !fields[relName]) {
-                    continue;
-                }*/
-                const relData = this.rels[relName];
-                if(relData === undefined) {
-                    throw new Error(`No relationship data ${this.type}:${relName}`);
-                }
-                data.relationships[relName] = {
-                    data: this.context.packRefData(relData),
-                    links: {
-                        self: urlBuilder(`${this.type}/${this.id}/relationships/${relName}`)
-                    }
-                };
-                /*if(this.rels[relName] instanceof Resource) {
-                    data.relationships[relName].data = this.rels[relName].packRef();
-                } else if (this.rels[relName] instanceof AbstractResourcesList) {
-                    data.relationships[relName].data = this.rels[relName].packRefs();
-                }*/
-            }
-        }
-        return data;
-    }
-    packRef() {
-        return {
-            id: this.id,
-            type: this.type
-        };
     }
     async update(data) {
         if(!await this.checkPermission('update', data)) {
             throw forbiddenError();
         }
-        const collection = this.context.api.collections[this.type];
-        data = await collection._update(this, data, 'update');
+        const collection = this.context.apme.collections[this.type];
+        data = await collection.update(this, data);
         this._attachObject(data);
         await this.clearCache();
         await this._loadRels();
@@ -181,12 +149,12 @@ export class Resource {
         if(!await this.checkPermission('create', data)) {
             throw forbiddenError();
         }
-        const collection = this.context.api.collections[this.type];
-        data = await collection._create(this, data, 'create');
+        const collection = this.context.apme.collections[this.type];
+        data = await collection.create(this, data);
         this._attachObject(data);
         if(!this.id) {
             this.id = collection.getId(this._object);
-            this.context._loadedMap.add(this); // @todo: take off in some event
+            this.context.loadedMap.add(this); // @todo: take off in some event
         }
         await this.clearCache();
         await this._loadRels();
@@ -196,16 +164,16 @@ export class Resource {
         if(!await this.checkPermission('read') || !await this.checkPermission('remove')) {
             throw forbiddenError();
         }
-        return await this.context.api.collections[this.type].removeOne(this.id, this.context);
+        return await this.context.apme.collections[this.type].remove(this);
     }
     async include(includeTree) {
         return await (new ResourcesTypedList(this.context, this.type, [this])).include(includeTree);
     }
-    async checkPermission(operation, data) {
+    async checkPermission(operation, data?) {
         if(this.context.privileged) {
             return true;
         }
-        const perm = this.context.api.collections[this.type].perms[operation];
+        const perm = this.context.apme.collections[this.type].perms[operation];
         if(perm.const != null) {
             return perm.const;
         }
@@ -218,7 +186,7 @@ export class Resource {
         return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation, data);
     }
     async clearCache() {
-        await this.context.api.collections[this.type].removeObjectCache(this.id);
+        await this.context.apme.collections[this.type].removeObjectCache(this.id);
     }
     /*toString() {
         return JSON.stringify({
@@ -230,18 +198,20 @@ export class Resource {
 }
 
 export class ResourcesMap {
-    constructor() {
-        this._map = {};
+    private map : {
+        [type: string]: {
+            [id: string]: Resource
+        }
+    } = {};
+    add(resource: Resource) : void {
+        (this.map[resource.type] || (this.map[resource.type] = {}))[resource.id] = resource;
     }
-    add(resource) {
-        (this._map[resource.type] || (this._map[resource.type] = {}))[resource.id] = resource;
+    get(type : string, id : string) : Resource {
+        return this.map[type] && this.map[type][id];
     }
-    get(type, id) {
-        return this._map[type] && this._map[type][id];
-    }
-    loopTypes(handler) {
-        for(const type in this._map) {
-            handler(type, this._map[type]);
+    loopTypes(handler: (type: string, resources: {[id: string]: Resource}) => void) {
+        for(const type in this.map) {
+            handler(type, this.map[type]);
         }
     }
 }

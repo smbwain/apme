@@ -1,5 +1,4 @@
-
-export {Api} from './api';
+export {Apme} from './apme';
 export {jsonErrorHandler} from './errors';
 export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from './cache';
 export function group(arr, field = 'id') {

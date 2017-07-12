@@ -1,42 +1,44 @@
-
-export function validationError(validationError, text) {
-    const err = new Error(`${text || 'Validation error'}: ${validationError.message}`);
+export function validationError(validationError, text? : string) {
+    const err = <any> new Error(`${text || 'Validation error'}: ${validationError.message}`);
     err.validation = validationError;
     err.httpCode = 400;
     return err;
 }
 
-export function unauthorizedError(str) {
-    const err = new Error(str || 'Unauthorized');
+export function unauthorizedError(str? : string) {
+    const err = <any> new Error(str || 'Unauthorized');
     err.httpCode = 401;
     return err;
 }
 
-export function forbiddenError(str) {
-    const err = new Error(str || 'Forbidden');
+export function forbiddenError(str? : string) {
+    const err = <any> new Error(str || 'Forbidden');
     err.httpCode = 403;
     return err;
 }
 
-export function notFoundError(str) {
-    const err = new Error(str || 'Not found');
+export function notFoundError(str? : string) {
+    const err = <any> new Error(str || 'Not found');
     err.httpCode = 404;
     return err;
 }
 
-export function badRequestError(str) {
-    const err = new Error(str || 'Bad Request');
+export function badRequestError(str? : string) {
+    const err = <any> new Error(str || 'Bad Request');
     err.httpCode = 400;
     return err;
 }
 
-export function methodNotAllowedError(str) {
-    const err = new Error(str || 'Method Not Allowed');
+export function methodNotAllowedError(str? : string) {
+    const err = <any> new Error(str || 'Method Not Allowed');
     err.httpCode = 405;
     return err;
 }
 
-export function jsonErrorHandler(options = {}) {
+export function jsonErrorHandler(options : {
+    debug?: boolean,
+    errorLog?: (err) => void
+} = {}) {
     const debug = ('debug' in options) ? !!options.debug : true;
     const errorLog = options.errorLog || (err => { console.error(err.stack || err) });
     return (err, req, res, next) => {

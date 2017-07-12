@@ -1,20 +1,10 @@
 
-export class Cache {
-    async get() {
-        throw new Error('Abstract method');
-    }
-    async set() {
-        throw new Error('Abstract method');
-    }
-    async remove() {
-        throw new Error('Abstract method');
-    }
+import {TObjectData} from './types';
 
-    /**
-     * @param {string} prefix
-     * @param {[string]} keys
-     * @returns {object}
-     */
+export abstract class Cache /*implements CacheInterface*/ {
+    abstract get(prefix, key);
+    abstract set(prefix, key, value);
+    abstract remove(prefix, key);
     async mget(prefix, keys) {
         const few = {};
         for(const key of keys) {
@@ -25,27 +15,16 @@ export class Cache {
         }
         return few;
     }
-
-    /**
-     * @param {string} prefix
-     * @param {object} few
-     */
     async mset(prefix, few) {
         for(const key in few) {
             await this.set(prefix, key, few[key]);
         }
     }
-
-    /**
-     * @param {string} prefix
-     * @param {[string]} keys
-     */
     async mremove(prefix, keys) {
         for(const key of keys) {
             await this.remove(prefix, key);
         }
     }
-
     async load(prefix, key, options, loader) {
         if(!loader) {
             loader = options;
@@ -61,14 +40,6 @@ export class Cache {
         }
         return cached;
     }
-
-    /**
-     * @param {string} prefix
-     * @param {[string]} keys
-     * @param {object} [options={}]
-     * @param {function} loader
-     * @returns {object}
-     */
     async mload(prefix, keys, options, loader) {
         if(!loader) {
             loader = options;
@@ -92,13 +63,14 @@ export class Cache {
                 few[key] = res[key];
             }
         }
-
         return few;
     }
 }
 
 export class SimpleMemoryCache extends Cache {
-    constructor({flushInterval} = {}) {
+    private _cache;
+    private _tmr;
+    constructor({flushInterval = null} = {}) {
         super();
         this._cache = {};
         if(flushInterval) {

@@ -1,9 +1,19 @@
-
-import {ResourcesTypedList} from './resources-lists';
+import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
 import {badRequestError} from './errors';
+import {TObjectData, RelationOptions} from "./types";
+import {Resource} from "./resource";
+import {Collection} from "./collection";
 
 export class Relationship {
-    constructor(collection, name, options) {
+    public name : string;
+    public toOne : boolean;
+    public getResourceOne : (resource: Resource) => Promise<Resource>;
+    public getResourceFew : (resources: Resource[]) => Promise<Resource[]>;
+    public setData : (data: TObjectData, value: any) => void;
+    public getListOne : (resource: Resource) => Promise<AbstractResourcesList>;
+    public getListFew : (resources: Resource[]) => Promise<AbstractResourcesList[]>;
+
+    constructor(collection : Collection, name : string, options : RelationOptions) {
         this.name = name;
         if(options.toOne) {
             this.toOne = true;
@@ -25,11 +35,9 @@ export class Relationship {
                     };
                 } else if(options.getFilterOne) {
                     this.getResourceOne = async function (resource) {
-                        const list = resource.context.list(type, {
+                        return (await resource.context.list(type, {
                             filter: await options.getFilterOne(resource)
-                        });
-                        await list.load();
-                        return list.items[0] || null;
+                        }).load()).items[0] || null;
                     };
                     this.getResourceFew = async function (resources) {
                         const res = [];
@@ -62,7 +70,7 @@ export class Relationship {
                 /*if(options.getFilterByObject) {
                  this.getListOne = async function (resource) {
                  await resource.load();
-                 return await collection.api.collections[type].loadList({
+                 return await collection.apme.collections[type].loadList({
                  filter: await options.getFilterByObject(resource.object)
                  });
                  }
@@ -97,7 +105,7 @@ export class Relationship {
                     };
                 } else if(options.loadObjectsOne) {
                     this.getListOne = async function (resource) {
-                        const relCollection = collection.api.collections[type];
+                        const relCollection = collection.apme.collections[type];
                         const list = new ResourcesTypedList(
                             resource.context,
                             type,
@@ -132,14 +140,14 @@ export class Relationship {
             throw new Error('toOne or toMany should be specified');
         }
     }
-    getOne(resource) {
+    getOne(resource : Resource) : Promise<Resource | AbstractResourcesList> {
         if(this.toOne) {
             return this.getResourceOne(resource);
         } else {
             return this.getListOne(resource);
         }
     }
-    getFew(resources) {
+    getFew(resources : Array<Resource>) : Promise<Array<Resource | AbstractResourcesList>> {
         if(this.toOne) {
             return this.getResourceFew(resources);
         } else {

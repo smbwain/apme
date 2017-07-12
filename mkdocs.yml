@@ -1,5 +1,7 @@
 site_name: apme
 pages:
-  - Get Started: index.md
-  - Api Reference: api.md
+  - 1. Introduction: index.md
+  - 2. Get started: get-started.md
+  - 3. API: api.md
+  - 4. Define options: define.md
 theme: readthedocs

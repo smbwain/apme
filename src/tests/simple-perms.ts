@@ -1,11 +1,13 @@
 import 'source-map-support/register';
 
-import {Api, jsonErrorHandler} from '..';
+import {Apme, jsonErrorHandler} from '..';
 
-import express from 'express';
-import bodyParser from 'body-parser';
-import request from 'request';
-import assert from 'assert';
+import * as express from 'express';
+import * as bodyParser from 'body-parser';
+import * as request from 'request';
+import * as assert from 'assert';
+import {Context} from "../context";
+import {jsonApi} from "../apis/jsonapi";
 
 const TEST_PORT = 23001;
 
@@ -18,7 +20,7 @@ const users = [{
 }];
 
 
-function makeRequest(path, opts, {expectedCode = 200} = {}) {
+function makeRequest(path, opts?, {expectedCode = 200} = {}) : Promise<string> {
     opts = opts || {};
     return new Promise((resolve, reject) => {
         request(`http://127.0.0.1:${TEST_PORT}${path}`, opts, (err, response, body) => {
@@ -41,11 +43,11 @@ describe('simple perms', () => {
     let server;
 
     before('should start server', done => {
-        const api = new Api();
-        api.define('users', {
+        const apme = new Apme();
+        apme.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
-            update: async (res, data) => {
+            update: async (res, {data}) => {
                 const index = users.findIndex(user => user.id == res.id);
                 if(index == -1) {
                     return null;
@@ -57,12 +59,12 @@ describe('simple perms', () => {
                 return users[index];
             },
             passId: true,
-            create: async (res, data) => {
+            create: async (res, {data}) => {
                 users.push({id: res.id, ...data});
                 return data;
             },
-            removeOne: async id => {
-                const index = users.findIndex(user => user.id == id);
+            remove: async resource => {
+                const index = users.findIndex(user => user.id == resource.id);
                 if(index == -1) {
                     return false;
                 }
@@ -80,6 +82,8 @@ describe('simple perms', () => {
                 }
             }
         });
+
+        const api = apme.use(jsonApi({url: '/api/'}));
 
         const app = express();
         app.use((req, res, next) => {
@@ -114,7 +118,7 @@ describe('simple perms', () => {
 
     it('shouldn\'t get records list (403)', async () => {
         await makeRequest('/api/users', {}, {
-            expectedCode: '403'
+            expectedCode: 403
         });
     });
 

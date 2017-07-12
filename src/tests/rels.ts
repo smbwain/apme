@@ -1,11 +1,12 @@
 import 'source-map-support/register';
 
-import {Api, jsonErrorHandler} from '..';
+import {Apme, jsonErrorHandler} from '..';
 
-import express from 'express';
-import bodyParser from 'body-parser';
-import request from 'request';
-import assert from 'assert';
+import * as express from 'express';
+import * as bodyParser from 'body-parser';
+import * as request from 'request';
+import * as assert from 'assert';
+import {jsonApi} from "../apis/jsonapi";
 
 const TEST_PORT = 23001;
 
@@ -26,7 +27,12 @@ const users = [{
     name: 'Author 3'
 }];
 
-const books = [{
+const books : Array<{
+    id: string,
+    name: string,
+    authors?: number[],
+    ownerId?: string
+}> = [{
     id: 'good-parts',
     name: 'Good parts',
     authors: [3, 5],
@@ -46,7 +52,7 @@ const books = [{
 }];
 
 
-function makeRequest(path, opts, {expectedCode = 200} = {}) {
+function makeRequest(path, opts?, {expectedCode = 200} = {}) : Promise<string> {
     opts = opts || {};
     return new Promise((resolve, reject) => {
         request(`http://127.0.0.1:${TEST_PORT}${path}`, opts, (err, response, body) => {
@@ -69,8 +75,8 @@ describe('rels', () => {
     let server;
 
     before(done => {
-        const api = new Api();
-        api.define('users', {
+        const apme = new Apme();
+        apme.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
             rels: {
@@ -82,9 +88,9 @@ describe('rels', () => {
                 }
             }
         });
-        api.define('books', {
+        apme.define('books', {
             packAttrs: ({name}) => ({name}),
-            loadList: async ({filter: {ownerId} = {}}) => (
+            loadList: async ({filter: {ownerId = ''} = {}}) => (
                 books.filter(book => !ownerId || book.ownerId == ownerId)
             ),
             loadOne: async id => (books.find(user => user.id == id)),
@@ -99,6 +105,8 @@ describe('rels', () => {
                 }
             }
         });
+
+        const api = apme.use(jsonApi({url: '/api/'}));
 
         const app = express();
         app.use(bodyParser.json({

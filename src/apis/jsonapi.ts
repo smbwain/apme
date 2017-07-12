@@ -1,51 +1,12 @@
-/**
- * @typedef {object} ResourceDefinition
- * @param load
- * @param loadFew
- * @param loadList
- * @param create(resource, data, op)
- * @param update(resource, data, op)
- * @param upsert(resource, data, op)
- * @param perms
- * @param rels
- */
 
-import Joi from 'joi';
-
-import {Collection} from './collection';
-import {Context} from './context';
-import {validate} from './validate';
-import {badRequestError, notFoundError} from './errors';
-import asyncMW from 'async-mw';
-import querystring from 'querystring';
-
-const schemas = {};
-{
-    const rel = Joi.object().unknown(false).keys({
-        id: Joi.string().required(),
-        type: Joi.string().required()
-    });
-    schemas.relationship = Joi.object().unknown(false).keys({
-        data: Joi.alternatives().required().try(
-            Joi.array().items(rel),
-            rel
-        )
-    });
-    schemas.relationshipToMany = Joi.object().unknown(false).keys({
-        data: Joi.array(rel)
-    });
-    schemas.update = Joi.object().required().keys({
-        data: Joi.object().required().unknown(false).keys({
-            id: Joi.string(),
-            type: Joi.string(),
-            attributes: Joi.object(),
-            relationships: Joi.object().pattern(/.*/, schemas.relationship)
-        }),
-        meta: Joi.object()
-    });
-    schemas.fields = Joi.object().pattern(/.*/, Joi.string());
-    schemas.include = Joi.string();
-}
+import * as asyncMW from 'async-mw';
+import * as querystring from 'querystring';
+import {Apme} from "../apme";
+import {badRequestError, notFoundError} from '../errors';
+import {validate} from '../validate';
+import * as Joi from 'joi';
+import {Resource} from "../resource";
+import {AbstractResourcesList} from "../resources-lists";
 
 function parseFields(fields) {
     const res = {};
@@ -73,60 +34,61 @@ function parseInclude(includeString) {
     return res;
 }
 
-export class Api {
-    constructor() {
-        this.collections = {};
+const schemas : any = {};
+{
+    const rel = Joi.object().unknown(false).keys({
+        id: Joi.string().required(),
+        type: Joi.string().required()
+    });
+    schemas.relationship = Joi.object().unknown(false).keys({
+        data: Joi.alternatives().required().try(
+            Joi.array().items(rel),
+            rel
+        )
+    });
+    schemas.relationshipToMany = Joi.object().unknown(false).keys({
+        data: Joi.array(rel)
+    });
+    schemas.update = Joi.object().required().keys({
+        data: Joi.object().required().unknown(false).keys({
+            id: Joi.string(),
+            type: Joi.string(),
+            attributes: Joi.object(),
+            relationships: Joi.object().pattern(/.*/, schemas.relationship)
+        }),
+        meta: Joi.object()
+    });
+    schemas.fields = Joi.object().pattern(/.*/, Joi.string());
+    schemas.include = Joi.string();
+}
+
+class JsonApi {
+    private apme : Apme;
+    private url : string;
+
+    constructor(apme: Apme, {url = '/'} : {url?: string} = {}) {
+        this.apme = apme;
+        this.url = url;
     }
 
-    /**
-     * @param {string} name
-     * @param {ResourceDefinition} options
-     */
-    define(name, options) {
-        this.collections[name] = new Collection(this, name, options);
+    urlBuilder(path : string, params?) {
+        return this.url+path+((params && Object.keys(params).length) ? '?'+querystring.stringify(params) : '');
     }
 
-    context(options) {
-        return new Context(this, options);
-    }
-
-    /**
-     * @param {Object.<string, Iterable.<string>>} fields
-     */
-    validateFields(fields) {
-        for(const collectionName in fields) {
-            const collection = this.collections[collectionName];
-            if(!collection) {
-                throw badRequestError(`Unknown collection ${collectionName}`);
-            }
-            if(collection.fieldsSetToGet) {
-                for(const fieldName of fields[collectionName]) {
-                    if(!collection.fieldsSetToGet.has(fieldName)) {
-                        throw badRequestError(`Unknown attribute or relationship "${collectionName}"."${fieldName}"`);
-                    }
-                }
-            }
-        }
-    }
-
-    expressInitMiddleware() {
+    expressInitMiddleware() : any {
         return (req, res, next) => {
-            req.apmeContext = this.context({
+            req.apmeContext = this.apme.context({
                 req
             });
             next();
         };
     }
 
-    expressJsonApiRouter({url = '/'} = {}) {
+    expressJsonApiRouter() : any {
         const router = require('express').Router();
 
-        function urlBuilder(path, params) {
-            return url+path+((params && Object.keys(params).length) ? '?'+querystring.stringify(params) : '');
-        }
-
         router.param('collection', (req, res, next, type) => {
-            req.collection = this.collections[type];
+            req.collection = this.apme.collections[type];
             req.type = type;
             if (!req.collection) {
                 next(notFoundError('No collection found'));
@@ -160,14 +122,14 @@ export class Api {
             const {filter, sort, page} = req.query;
 
             const list = await req.apmeContext.list(type, {sort, page, filter}).load();
-            const included = (await list.include(req.include)).packItems(urlBuilder);
+            const included = this.packResourcesListItems(await list.include(req.include));
 
             return {
-                data: list.packItems(urlBuilder),
+                data: this.packResourcesListItems(list),
                 meta: list.meta,
                 included: included.length ? included : undefined,
                 links: {
-                    self: urlBuilder(`${type}`, req.query)
+                    self: this.urlBuilder(`${type}`, req.query)
                 }
             };
         }));
@@ -184,13 +146,13 @@ export class Api {
             const fields = parseFields(req.query.fields);
             const include = parseInclude(req.query.include);
 
-            const included = (await resource.include(include)).packItems(urlBuilder);
+            const included = this.packResourcesListItems(await resource.include(include));
 
             return {
-                data: resource.pack(urlBuilder),
+                data: this.packResource(resource),
                 included: included.length ? included : undefined,
                 links: {
-                    self: urlBuilder(`${type}/${id}`, req.query)
+                    self: this.urlBuilder(`${type}/${id}`, req.query)
                 }
             };
         }));
@@ -200,7 +162,7 @@ export class Api {
                 const {collection} = req;
 
                 // validate basic format
-                const body = await new Promise((resolve, reject) => {
+                const body : any = await new Promise((resolve, reject) => {
                     Joi.validate(req.body, schemas.update, (err, value) => {
                         err ? reject(err) : resolve(value);
                     });
@@ -264,13 +226,13 @@ export class Api {
                 const fields = parseFields(req.query.fields);
                 const include = parseInclude(req.query.include);
 
-                const included = (await resource.include(include)).packItems(urlBuilder);
+                const included = this.packResourcesListItems(await resource.include(include));
 
                 return {
-                    data: resource.pack(urlBuilder),
+                    data: this.packResource(resource),
                     included: included.length ? included : undefined,
                     links: {
-                        self: urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
+                        self: this.urlBuilder(`${resource.type}/${resource.id}`) // @todo: params
                     },
                     meta: Object.keys(req.apmeContext.meta).length ? req.apmeContext.meta : undefined
                 };
@@ -312,13 +274,13 @@ export class Api {
                 if(resource) {
                     await resource.load();
                     if(resource.exists) {
-                        data = resource.pack(urlBuilder);
+                        data = this.packResource(resource);
                     }
                 }
             } else {
                 const list = await rel.getListOne(mainResource);
                 await list.load();
-                data = list.packItems(urlBuilder);
+                data = this.packResourcesListItems(list);
             }
 
             // @todo: add included
@@ -326,7 +288,7 @@ export class Api {
             return {
                 data,
                 links: {
-                    self: urlBuilder(`${type}/${id}/${relName}`)
+                    self: this.urlBuilder(`${type}/${id}/${relName}`)
                 }
             };
 
@@ -334,37 +296,37 @@ export class Api {
             // const included = (await resource.include(include)).packItems(fields);
 
             /*return {
-                data: mainResource.pack(fields[type])
-                //included: included.length ? included : undefined
-            };*/
+             data: mainResource.pack(fields[type])
+             //included: included.length ? included : undefined
+             };*/
 
 
             // @todo
             /*const rel = req.collection.rels[req.params.relName];
-            if(!rel) {
-                throw notFoundError('No relation with such name');
-            }*/
+             if(!rel) {
+             throw notFoundError('No relation with such name');
+             }*/
 
             /*if(req.query.include) {
              req.apmeContext.include = parseInclude(req.query.include);
-            }*/
+             }*/
 
             /*const mainData = (await req.collection.loadByIdsAndPack([req.params.id], req.apmeContext))[0];
-            if(!mainData) {
-                throw notFoundError();
-            }
+             if(!mainData) {
+             throw notFoundError();
+             }
 
-            const data = await loadAllRelationships(this, {
-                ...req.apmeContext,
-                include: {
-                    [req.params.relName]: {}
-                }
-            }, [mainData]);
+             const data = await loadAllRelationships(this, {
+             ...req.apmeContext,
+             include: {
+             [req.params.relName]: {}
+             }
+             }, [mainData]);
 
-            return {
-                data: (rel.getId || rel.getOne) ? data[0] || null : data,
-                included: await loadAllRelationships(this, req.apmeContext, data)
-            };*/
+             return {
+             data: (rel.getId || rel.getOne) ? data[0] || null : data,
+             included: await loadAllRelationships(this, req.apmeContext, data)
+             };*/
         }));
 
         router.get('/:collection/:id/relationships/:relName', asyncMW(async req => {
@@ -383,55 +345,134 @@ export class Api {
             }
 
             /*let data;
-            if(rel.toOne) {
-                const resource = await rel.getResourceOne(mainResource);
-                data = resource ? resource.packRef() : null
-            } else {
-                const list = await rel.getListOne(mainResource);
-                await list.load();
-                //console.log('>>list', list);
-                data = list.packRefs();
-            }*/
+             if(rel.toOne) {
+             const resource = await rel.getResourceOne(mainResource);
+             data = resource ? resource.packRef() : null
+             } else {
+             const list = await rel.getListOne(mainResource);
+             await list.load();
+             //console.log('>>list', list);
+             data = list.packRefs();
+             }*/
 
             return {
-                data: req.apmeContext.packRefData(await rel.getOne(mainResource)),
+                data: this.packRefData(await rel.getOne(mainResource)),
                 links: {
-                    self: urlBuilder(`${type}/${id}/relationships/${relName}`),
-                    related: urlBuilder(`${type}/${id}/${relName}`)
+                    self: this.urlBuilder(`${type}/${id}/relationships/${relName}`),
+                    related: this.urlBuilder(`${type}/${id}/${relName}`)
                 }
             };
         }));
 
         /*router.patch('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            /!*const body = await new Promise((resolve, reject) => {
-                Joi.validate(req.body, schemas.relationship, (err, value) => {
-                    err ? reject(err) : resolve(value);
-                });
-            });*!/
-            // @todo
-            // @todo: return 400 on error
-        }));
+         /!*const body = await new Promise((resolve, reject) => {
+         Joi.validate(req.body, schemas.relationship, (err, value) => {
+         err ? reject(err) : resolve(value);
+         });
+         });*!/
+         // @todo
+         // @todo: return 400 on error
+         }));
 
-        router.post('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            /!*const body = await new Promise((resolve, reject) => {
-                Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
-                    err ? reject(err) : resolve(value);
-                });
-            });*!/
-            // @todo
-            // @todo: return 400 on error
-        }));
+         router.post('/:collection/:id/relationships/:relName', asyncMW(async req => {
+         /!*const body = await new Promise((resolve, reject) => {
+         Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
+         err ? reject(err) : resolve(value);
+         });
+         });*!/
+         // @todo
+         // @todo: return 400 on error
+         }));
 
-        router.delete('/:collection/:id/relationships/:relName', asyncMW(async req => {
-            /!*const body = await new Promise((resolve, reject) => {
-                Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
-                    err ? reject(err) : resolve(value);
-                });
-            });*!/
-            // @todo
-            // @todo: return 400 on error
-        }));*/
+         router.delete('/:collection/:id/relationships/:relName', asyncMW(async req => {
+         /!*const body = await new Promise((resolve, reject) => {
+         Joi.validate(req.body, schemas.relationshipToMany, (err, value) => {
+         err ? reject(err) : resolve(value);
+         });
+         });*!/
+         // @todo
+         // @todo: return 400 on error
+         }));*/
 
         return router;
     }
+
+    private validateFields(fields: {[name: string]: Iterable<string>}) : void {
+        for(const collectionName in fields) {
+            const collection = this.apme.collections[collectionName];
+            if(!collection) {
+                throw badRequestError(`Unknown collection ${collectionName}`);
+            }
+            if(collection.fieldsSetToGet) {
+                for(const fieldName of fields[collectionName]) {
+                    if(!collection.fieldsSetToGet.has(fieldName)) {
+                        throw badRequestError(`Unknown attribute or relationship "${collectionName}"."${fieldName}"`);
+                    }
+                }
+            }
+        }
+    }
+
+    private packResource(resource : Resource) : any {
+        const collection = this.apme.collections[resource.type];
+        const data : any = {
+            id: resource.id,
+            type: resource.type,
+            attributes: collection.packAttrs(resource.data, resource.context.fields[resource.type])
+            /*links: {
+                self: this.urlBuilder(`${resource.type}/${resource.id}`)
+            }*/
+        };
+        if(Object.keys(collection.rels).length) {
+            data.relationships = {};
+            for(const relName in collection.rels) {
+                /*if(fields && !fields[relName]) {
+                 continue;
+                 }*/
+                const relData = resource.rels[relName];
+                if(relData === undefined) {
+                    throw new Error(`No relationship data ${resource.type}:${relName}`);
+                }
+                data.relationships[relName] = {
+                    data: this.packRefData(relData),
+                    links: {
+                        self: this.urlBuilder(`${resource.type}/${resource.id}/relationships/${relName}`)
+                    }
+                };
+                /*if(this.rels[relName] instanceof Resource) {
+                 data.relationships[relName].data = this.rels[relName].packRef();
+                 } else if (this.rels[relName] instanceof AbstractResourcesList) {
+                 data.relationships[relName].data = this.rels[relName].packRefs();
+                 }*/
+            }
+        }
+        return data;
+    }
+
+    private packResourcesListItems(resourceList: AbstractResourcesList) : any {
+        return resourceList.items.map(resource => this.packResource(resource));
+    }
+
+    private packResourceRef(resource : Resource) : any {
+        return {
+            id: resource.id,
+            type: resource.type
+        };
+    }
+
+    private packRefData(value : any) : any {
+        if(value instanceof Resource) {
+            return this.packResourceRef(value);
+        } else if(value instanceof AbstractResourcesList) {
+            return value.items.map(resource => this.packResourceRef(resource));
+        } else if(value === null) {
+            return null;
+        } else {
+            throw new Error();
+        }
+    }
 }
+
+export const jsonApi = options => (apme: Apme) => {
+    return new JsonApi(apme, options);
+};

@@ -1,15 +1,19 @@
 
 import {Resource, ResourcesMap} from './resource';
 import {forbiddenError} from './errors';
+import {
+    TListParams,
+} from "./types";
+import {Context} from './context';
 
-export class AbstractResourcesList {
+export abstract class AbstractResourcesList {
+    public context: Context;
+    public items: Array<Resource>;
+    public loaded: boolean;
     constructor(context, items = []) {
         this.context = context;
         this.items = items;
         this.loaded = false;
-    }
-    packItems(urlBuilder) {
-        return this.items.map(resource => resource.pack(urlBuilder));
     }
     push(resource) {
         this.items.push(resource);
@@ -19,6 +23,7 @@ export class AbstractResourcesList {
         this.items = this.items.filter(resource => resource.exists);
         return this;
     }
+    abstract splitByType() : {[type : string]: ResourcesTypedList};
     async include(includeTree) {
         const includedResult = new ResourcesMixedList(this.context);
 
@@ -59,7 +64,7 @@ export class AbstractResourcesList {
                             if(itemRel === null) {
                                 continue;
                             }
-                            for(const resource of (itemRel instanceof Resource) ? [itemRel] : itemRel.items) {
+                            for(const resource of (itemRel instanceof Resource) ? [itemRel] : (itemRel as ResourcesMixedList).items) {
                                 if(list) {
                                     list.push(resource); // @todo: what about unique
                                 }
@@ -92,7 +97,9 @@ export class AbstractResourcesList {
     }
 }
 
-export class ResourcesTypedList extends AbstractResourcesList {
+export class ResourcesTypedList extends AbstractResourcesList /*implements LoadableResourcesListInterface, TypedResourcesListInterface*/ {
+    public type : string;
+
     constructor(context, type, items = []) {
         super(context, items);
         this.type = type;
@@ -113,7 +120,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
 
         const toLoad = this.items.filter(item => !item.loaded);
         if(toLoad.length) {
-            const res = await this.context.api.collections[this.type].loadFew(toLoad.map(resource => resource.id), this.context);
+            const res = await this.context.apme.collections[this.type].loadFew(toLoad.map(resource => resource.id), this.context);
             for(const resource of toLoad) {
                 resource._attachObject(res[resource.id] || null);
             }
@@ -137,9 +144,9 @@ export class ResourcesTypedList extends AbstractResourcesList {
         for(const item of items) {
             item._rels = {};
         }
-        for(const relName in this.context.api.collections[this.type].rels) {
+        for(const relName in this.context.apme.collections[this.type].rels) {
             if(!fields || fields.has(relName)) {
-                (await this.context.api.collections[this.type].rels[relName].getFew(items)).forEach((related, i) => {
+                (await this.context.apme.collections[this.type].rels[relName].getFew(items)).forEach((related, i) => {
                     items[i]._rels[relName] = related;
                 });
             }
@@ -156,7 +163,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
         if(this.context.privileged) {
             return true;
         }
-        const perm = this.context.api.collections[this.type].perms[operation];
+        const perm = this.context.apme.collections[this.type].perms[operation];
         if(perm.const != null) {
             return perm.const;
         }
@@ -175,7 +182,7 @@ export class ResourcesTypedList extends AbstractResourcesList {
     }
 }
 
-export class ResourcesMixedList extends AbstractResourcesList {
+export class ResourcesMixedList extends AbstractResourcesList /*implements LoadableResourcesListInterface*/ {
     async load() {
         if(this.loaded) {
             return this;
@@ -224,7 +231,9 @@ export class ResourcesMixedList extends AbstractResourcesList {
     }
 }
 
-export class ResourceTypedQuery extends ResourcesTypedList {
+export class ResourceTypedQuery extends ResourcesTypedList /*implements LoadableResourcesListInterface*/ {
+    public params : TListParams;
+    public meta : any;
     constructor(context, type, params) {
         super(context, type);
         this.params = params;
@@ -233,7 +242,7 @@ export class ResourceTypedQuery extends ResourcesTypedList {
         if(this.loaded) {
             return this;
         }
-        const collection = this.context.api.collections[this.type];
+        const collection = this.context.apme.collections[this.type];
         const loaded = await collection.loadList(this.params, this.context);
         this.items = loaded.items.map(object => {
             return this.context.resource(this.type, collection.getId(object), object);
@@ -251,8 +260,5 @@ export class ResourceTypedQuery extends ResourcesTypedList {
     async checkPermission(operation) {
         await this.load(); // @todo: remove that
         return await ResourcesTypedList.prototype.checkPermission.call(this, operation);
-    }
-    async clearCache() {
-        await this.context.api.collections[this.type].removeListCache(this.params);
     }
 }
