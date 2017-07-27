@@ -1,8 +1,9 @@
 import {Collection} from './collection';
 import {Context} from './context';
 import {ContextOptions, ResourceDefinition} from './types';
+import {notFoundError} from './errors';
 
-export class Apme /*implements IApme*/ {
+export class Apme {
     public collections : {[name: string] : Collection} = {};
 
     define(name : string, options: ResourceDefinition) : void {
@@ -13,7 +14,14 @@ export class Apme /*implements IApme*/ {
         return new Context(this, options);
     }
 
-    use(plugin : (apme: Apme) => any) {
+    use(plugin : (apme: Apme) => any) : any {
         return plugin(this);
+    }
+
+    collection(name : string) : Collection {
+        if (!this.collections[name]) {
+            throw notFoundError('No collection found');
+        }
+        return this.collections[name];
     }
 }

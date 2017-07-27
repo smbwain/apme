@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Jsonapi server middleware for express",
   "main": "dist/index.js",
+  "types": "main.d.ts",
   "scripts": {
     "build": "gulp build",
     "test": "mocha dist/tests"

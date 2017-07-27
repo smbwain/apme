@@ -76,7 +76,7 @@ export class Collection {
     public type : string;
     private _listCacheInvalidateKeys : (params: {filter: any, sort: any, page: any}) => string[];
     private _cache : Cache;
-    public fieldsSetToGet : Set<string>;
+    public fieldsToGet? : Set<string>;
     // private _loadOne : (id : string, context : IContext) => Promise<TObjectData>;
     // private _loadFew : (ids : string[], context : IContext) => Promise<{[key : string]: TObjectData}>;
     public packAttrs : (object : TObjectData, fieldsSet : Set<string>) => {[attrName: string]: any};
@@ -157,7 +157,7 @@ export class Collection {
         this._cache = options.cache;
 
         if(options.fields) {
-            this.fieldsSetToGet = new Set();
+            this.fieldsToGet = new Set();
             const setters = {};
             const getters = {};
             for(const name in options.fields) {
@@ -179,7 +179,7 @@ export class Collection {
 
                 if(d.get !== false) {
                     getters[name] = d.get || (obj => obj[name]);
-                    this.fieldsSetToGet.add(name);
+                    this.fieldsToGet.add(name);
                 }
             }
             this.packAttrs = (object, fieldsSet) => {

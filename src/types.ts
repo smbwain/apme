@@ -79,50 +79,7 @@ export type ContextOptions = {
 
 export type TObjectData = any;
 
-/*export interface ApmeInterface {
-    define(name: string, options: ResourceDefinition) : void;
-    context(options: ContextOptions) : ContextInterface;
-    expressInitMiddleware() : (req, res, next) => void;
-    expressJsonApiRouter({url : string}) : any;
-}
-
-export interface ContextInterface {
-    setMeta(updates : {[key : string] : any});
-    resource(type : string, id? : string, object? : TObjectData) : ResourceInterface;
-    resources(type : string, ids : string[]) : LoadableResourcesListInterface & TypedResourcesListInterface;
-    list(type : string, params : TListParams) : LoadableResourcesListInterface & TypedResourcesListInterface;
-    setInvalidate(type : string, keys : string[]) : Promise<void>;
-}
-
-export interface CacheInterface {
-    get(prefix : string, key : string) : Promise<TObjectData>;
-    set(prefix : string, key : string, value : TObjectData);
-    remove(prefix : string, key : string) : Promise<boolean>;
-    mget(prefix : string, keys : string[]) : Promise<{[key : string]: TObjectData}>;
-    mset(prefix : string, few : {[key : string]: TObjectData}) : Promise<void>;
-    mremove(prefix : string, keys : string[]) : Promise<void>;
-    load(prefix : string, key : string, options : {fast?: boolean}, loader : () => Promise<TObjectData>) : Promise<TObjectData>;
-    // load(prefix : string, key : string, loader : () => Promise<TObjectData>) : Promise<TObjectData>;
-    mload(prefix : string, keys : string[], options : {fast?: boolean}, loader : (keys : string[]) => Promise<TObjectData>) : Promise<{[key : string]: TObjectData}>;
-    // mload(prefix : string, keys : string[], loader : (keys : string[]) => Promise<TObjectData>) : Promise<{[key : string]: TObjectData}>;
-}*/
-
 // resource
-
-/*export interface ResourceInterface {
-    id : string;
-    type : string;
-    context : ContextInterface;
-    loaded : boolean;
-    exists : boolean;
-    data : TObjectData;
-    rels : {[relName : string]: TRelationData};
-    load(options?: {mustExist?: boolean}): Promise<ResourceInterface>;
-    update(data : any) : Promise<ResourceInterface>;
-    create(data : any) : Promise<ResourceInterface>;
-    remove(): Promise<boolean>;
-    include(includeTree : TInclusionTree) : Promise<ReadableResourcesListInterface>;
-}*/
 
 // lists
 
@@ -132,21 +89,3 @@ export type TListParams = {
     sort?: any,
     fields?: Set<string>
 };
-
-/*export interface LoadableResourcesListInterface {
-    context: ContextInterface;
-    loaded: boolean;
-    load(): Promise<ReadableResourcesListInterface>;
-}
-
-export interface ReadableResourcesListInterface extends LoadableResourcesListInterface {
-    items: Array<ResourceInterface>;
-    packItems() : any;
-    splitByType(): {[type : string]: ReadableResourcesListInterface & TypedResourcesListInterface};
-    include(includeTree : TInclusionTree) : Promise<ReadableResourcesListInterface>;
-    checkPermission(operation : string, context? : ContextInterface) : Promise<boolean>;
-}
-
-export interface TypedResourcesListInterface {
-    type : string;
-}*/

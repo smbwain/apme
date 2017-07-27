@@ -4,7 +4,7 @@ import {AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './r
 import {ContextOptions, TListParams} from './types';
 import {Apme} from './apme';
 
-export class Context /*implements ContextInterface*/ {
+export class Context {
     public meta : {
         [key: string]: any
     } = {};
@@ -12,7 +12,7 @@ export class Context /*implements ContextInterface*/ {
     public req : any;
     public privileged : boolean;
     public loadedMap : ResourcesMap = new ResourcesMap();
-    public fields;
+    public fields : {[name: string] : Set<string>};
 
     constructor(apme : Apme, {req, privileged = false, fields = {}, meta = {}} : ContextOptions) {
         this.apme = apme;

@@ -1,4 +1,5 @@
-export {Apme} from './apme';
+import {Apme} from "./apme";
+export {Apme};
 export {jsonErrorHandler} from './errors';
 export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from './cache';
 export function group(arr, field = 'id') {
@@ -9,3 +10,7 @@ export function group(arr, field = 'id') {
     }
     return map;
 }
+
+export default function () {
+    return new Apme();
+};
