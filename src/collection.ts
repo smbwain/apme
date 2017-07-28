@@ -7,7 +7,7 @@ import * as Joi from 'joi';
 import {validate} from './validate';
 import {
     ObjectData, ListParams, Schema, ResourceDefinition, CacheInterface, ContextInterface,
-    SyncOrAsync, ResourceInterface, PermissionRecord
+    SyncOrAsync, ResourceInterface, PermissionRecord, CollectionInterface
 } from './types';
 import {Context} from "./context";
 import {Apme} from './apme';
@@ -73,7 +73,7 @@ const optionsScheme = Joi.object()
     .without('upsert', ['update', 'create'])
     .without('fields', ['packAttrs', 'unpeckAttrs']);
 
-export class Collection {
+export class Collection implements CollectionInterface {
     public apme : Apme;
     public type : string;
     private _listCacheInvalidateKeys : (params: {filter: any, sort: any, page: any}) => string[];

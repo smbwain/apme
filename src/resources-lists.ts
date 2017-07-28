@@ -1,22 +1,22 @@
 
 import {Resource, ResourcesMap} from './resource';
 import {forbiddenError} from './errors';
-import {ListParams, PermissionRecord, ReadableResourcesListInterface} from "./types";
+import {ListParams, PermissionRecord, ListInterface, IncludeTree} from "./types";
 import {Context} from './context';
 
-export abstract class AbstractResourcesList {
+export abstract class AbstractResourcesList implements ListInterface.Readable, ListInterface.Loadable {
     public context: Context;
     public meta : {
         [name: string]: any
     };
-    public items: Array<Resource>;
+    public items: Resource[];
     public loaded: boolean;
-    constructor(context, items = []) {
+    constructor(context : Context, items : Resource[] = []) {
         this.context = context;
         this.items = items;
         this.loaded = false;
     }
-    push(resource) {
+    push(resource : Resource) : void {
         this.items.push(resource);
         this.loaded = false;
     }
@@ -25,8 +25,11 @@ export abstract class AbstractResourcesList {
         return this;
     }
     abstract splitByType() : {[type : string]: ResourcesTypedList};
-    abstract load() : Promise<ReadableResourcesListInterface>;
-    async include(includeTree) {
+    abstract load() : Promise<ListInterface.Readable>;
+    /*async loadIdentifiers() : Promise<Resource[]> {
+        return this.items;
+    }*/
+    async include(includeTree : IncludeTree) : Promise<ResourcesMixedList> {
         const includedResult = new ResourcesMixedList(this.context);
 
         if(!includeTree) {
@@ -35,7 +38,10 @@ export abstract class AbstractResourcesList {
 
         const usedMap = this.getMap();
 
-        let includeSets = [
+        let includeSets : Array<{
+            includeTree: IncludeTree,
+            list: AbstractResourcesList
+        }> = [
             {
                 includeTree,
                 list: this
@@ -66,7 +72,8 @@ export abstract class AbstractResourcesList {
                             if(itemRel === null) {
                                 continue;
                             }
-                            for(const resource of (itemRel instanceof Resource) ? [itemRel] : (itemRel as ResourcesMixedList).items) {
+
+                            for(const resource of itemRel.one ? [itemRel.one] : itemRel.many ? itemRel.many.items : []) {
                                 if(list) {
                                     list.push(resource); // @todo: what about unique
                                 }
@@ -90,7 +97,7 @@ export abstract class AbstractResourcesList {
 
         return includedResult;
     }
-    getMap() {
+    getMap() : ResourcesMap {
         const map = new ResourcesMap();
         for(const item of this.items) {
             map.add(item);
@@ -99,7 +106,7 @@ export abstract class AbstractResourcesList {
     }
 }
 
-export class ResourcesTypedList extends AbstractResourcesList /*implements LoadableResourcesListInterface, TypedResourcesListInterface*/ {
+export class ResourcesTypedList extends AbstractResourcesList implements ListInterface.Typed {
     public type : string;
 
     constructor(context, type, items = []) {
@@ -233,7 +240,7 @@ export class ResourcesMixedList extends AbstractResourcesList /*implements Loada
     }
 }
 
-export class ResourceTypedQuery extends ResourcesTypedList /*implements LoadableResourcesListInterface*/ {
+export class ResourceTypedQuery extends ResourcesTypedList implements ListInterface.TypedQuery {
     public params : ListParams;
     public meta : any;
     constructor(context, type, params) {

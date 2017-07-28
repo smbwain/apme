@@ -3,7 +3,7 @@ export * from './src/types';
 
 import {ApmeInterface, CacheInterface, ObjectData, ResourceInterface} from "./src/types";
 
-export function apme() : ApmeInterface;
+export default function() : ApmeInterface;
 
 export function jsonErrorHandler(options? : {
     debug?: boolean,
@@ -15,7 +15,6 @@ export function simpleMemoryCache(options?: {flushInterval? : number}) : CacheIn
 export function jsonApi(options?: {url? : string}) : (apme: ApmeInterface) => any;
 
 export function group<T>(arr : T[], field? : string | ((object: T) => string)) : {[name: string] : T};
-
 
 export abstract class Cache implements CacheInterface {
     abstract get(prefix : string, key : string) : Promise<ObjectData>;

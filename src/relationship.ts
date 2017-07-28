@@ -1,10 +1,10 @@
 import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
 import {badRequestError} from './errors';
-import {ObjectData, RelationOptions} from "./types";
+import {ObjectData, RelationOptions, RelationshipInterface} from "./types";
 import {Resource} from "./resource";
 import {Collection} from "./collection";
 
-export class Relationship {
+export class Relationship implements RelationshipInterface {
     public name : string;
     public toOne : boolean;
     public getResourceOne : (resource: Resource) => Promise<Resource>;
@@ -140,18 +140,32 @@ export class Relationship {
             throw new Error('toOne or toMany should be specified');
         }
     }
-    getOne(resource : Resource) : Promise<Resource | AbstractResourcesList> {
+    async getOne(resource : Resource) : Promise<{
+        one?: Resource,
+        many?: AbstractResourcesList
+    }> {
         if(this.toOne) {
-            return this.getResourceOne(resource);
+            return {
+                one: await this.getResourceOne(resource)
+            };
         } else {
-            return this.getListOne(resource);
+            return {
+                many: await this.getListOne(resource)
+            };
         }
     }
-    getFew(resources : Array<Resource>) : Promise<Array<Resource | AbstractResourcesList>> {
+    async getFew(resources : Array<Resource>) : Promise<Array<{
+        one?: Resource,
+        many?: AbstractResourcesList
+    }>> {
         if(this.toOne) {
-            return this.getResourceFew(resources);
+            return (await this.getResourceFew(resources)).map(resource => ({
+                one: resource
+            }));
         } else {
-            return this.getListFew(resources);
+            return (await this.getListFew(resources)).map(list => ({
+                many: list
+            }));
         }
     }
     /*setData(data, relValue) {

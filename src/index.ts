@@ -17,8 +17,6 @@ export function simpleMemoryCache(options?: {flushInterval? : number}) : SimpleM
     return new SimpleMemoryCache(options);
 }
 
-export {jsonApi} from './apis/jsonapi';
-
 export default function () : Apme {
     return new Apme();
 };

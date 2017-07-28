@@ -16,13 +16,16 @@ import {ObjectData, PermissionRecord, ResourceInterface} from "./types";
     return res;
 }*/
 
-export class Resource implements ResourceInterface {
+export class Resource implements ResourceInterface.Readable, ResourceInterface.Loadable {
     public context : Context;
     public type : string;
     public id : string;
     private _object : any;
     public _rels : {
-        [name: string]: Resource | AbstractResourcesList
+        [name: string]: {
+            one?: Resource,
+            many?: AbstractResourcesList
+        }
     } = null;
 
     constructor(context, type, id, object?) {
