@@ -1,6 +1,7 @@
 import {Collection} from './collection';
 import {Context} from './context';
 import {ApmeInterface, ResourceDefinition, ContextOptions} from './types';
+import {notFoundError} from './errors';
 
 export class Apme implements ApmeInterface {
     public collections : {[name: string] : Collection} = {};
@@ -13,7 +14,14 @@ export class Apme implements ApmeInterface {
         return new Context(this, options);
     }
 
-    use(plugin : (apme: ApmeInterface) => any) {
+    use(plugin : (apme: Apme) => any) : any {
         return plugin(this);
+    }
+
+    collection(name : string) : Collection {
+        if (!this.collections[name]) {
+            throw notFoundError('No collection found');
+        }
+        return this.collections[name];
     }
 }

@@ -12,7 +12,7 @@ export class Context implements ContextInterface {
     public req : any;
     public privileged : boolean;
     public loadedMap : ResourcesMap = new ResourcesMap();
-    public fields;
+    public fields : {[name: string] : Set<string>};
 
     constructor(apme : Apme, {req, privileged = false, fields = {}, meta = {}} : ContextOptions) {
         this.apme = apme;

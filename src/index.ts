@@ -13,12 +13,12 @@ export function group<T>(arr : T[], field : string | ((object: T) => string) = '
     return map;
 }
 
-export function apme() : Apme {
-    return new Apme();
-}
-
 export function simpleMemoryCache(options?: {flushInterval? : number}) : SimpleMemoryCache {
     return new SimpleMemoryCache(options);
 }
 
 export {jsonApi} from './apis/jsonapi';
+
+export default function () : Apme {
+    return new Apme();
+};

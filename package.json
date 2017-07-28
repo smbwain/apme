@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "types.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "gulp build",
     "test": "mocha dist/tests"
   },
   "repository": {
