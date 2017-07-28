@@ -1,6 +1,6 @@
 import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
 import {badRequestError} from './errors';
-import {TObjectData, RelationOptions} from "./types";
+import {ObjectData, RelationOptions} from "./types";
 import {Resource} from "./resource";
 import {Collection} from "./collection";
 
@@ -9,7 +9,7 @@ export class Relationship {
     public toOne : boolean;
     public getResourceOne : (resource: Resource) => Promise<Resource>;
     public getResourceFew : (resources: Resource[]) => Promise<Resource[]>;
-    public setData : (data: TObjectData, value: any) => void;
+    public setData : (data: ObjectData, value: any) => void;
     public getListOne : (resource: Resource) => Promise<AbstractResourcesList>;
     public getListFew : (resources: Resource[]) => Promise<AbstractResourcesList[]>;
 

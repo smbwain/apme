@@ -1,13 +1,14 @@
 
 import {Resource, ResourcesMap} from './resource';
 import {forbiddenError} from './errors';
-import {
-    TListParams,
-} from "./types";
+import {ListParams, PermissionRecord, ReadableResourcesListInterface} from "./types";
 import {Context} from './context';
 
 export abstract class AbstractResourcesList {
     public context: Context;
+    public meta : {
+        [name: string]: any
+    };
     public items: Array<Resource>;
     public loaded: boolean;
     constructor(context, items = []) {
@@ -24,6 +25,7 @@ export abstract class AbstractResourcesList {
         return this;
     }
     abstract splitByType() : {[type : string]: ResourcesTypedList};
+    abstract load() : Promise<ReadableResourcesListInterface>;
     async include(includeTree) {
         const includedResult = new ResourcesMixedList(this.context);
 
@@ -159,11 +161,11 @@ export class ResourcesTypedList extends AbstractResourcesList /*implements Loada
         };
     }
 
-    async checkPermission(operation) {
+    async checkPermission(op : string) {
         if(this.context.privileged) {
             return true;
         }
-        const perm = this.context.apme.collections[this.type].perms[operation];
+        const perm : PermissionRecord = this.context.apme.collections[this.type].perms[op];
         if(perm.const != null) {
             return perm.const;
         }
@@ -171,10 +173,10 @@ export class ResourcesTypedList extends AbstractResourcesList /*implements Loada
             return await perm.byContext(this.context);
         }
         if(perm.few) {
-            return await perm.few(this, operation);
+            return await perm.few({list: this, op, context: this.context});
         }
-        for(const item of this.items) {
-            if(!await perm.one(item, operation)) {
+        for(const resource of this.items) {
+            if(!await perm.one({resource, op, context: this.context})) {
                 return false;
             }
         }
@@ -232,7 +234,7 @@ export class ResourcesMixedList extends AbstractResourcesList /*implements Loada
 }
 
 export class ResourceTypedQuery extends ResourcesTypedList /*implements LoadableResourcesListInterface*/ {
-    public params : TListParams;
+    public params : ListParams;
     public meta : any;
     constructor(context, type, params) {
         super(context, type);

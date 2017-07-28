@@ -5,11 +5,13 @@ import {v4 as uuid} from 'uuid';
 import {Relationship} from './relationship';
 import * as Joi from 'joi';
 import {validate} from './validate';
-import {TObjectData, TListParams, TSchema, ResourceDefinition} from './types';
+import {
+    ObjectData, ListParams, Schema, ResourceDefinition, CacheInterface, ContextInterface,
+    SyncOrAsync, ResourceInterface, PermissionRecord
+} from './types';
 import {Context} from "./context";
 import {Apme} from './apme';
 import {Resource} from './resource';
-import {Cache} from './cache';
 import {ResourcesTypedList} from "./resources-lists";
 
 const optionsScheme = Joi.object()
@@ -75,32 +77,32 @@ export class Collection {
     public apme : Apme;
     public type : string;
     private _listCacheInvalidateKeys : (params: {filter: any, sort: any, page: any}) => string[];
-    private _cache : Cache;
+    private _cache : CacheInterface;
     public fieldsSetToGet : Set<string>;
     // private _loadOne : (id : string, context : IContext) => Promise<TObjectData>;
     // private _loadFew : (ids : string[], context : IContext) => Promise<{[key : string]: TObjectData}>;
-    public packAttrs : (object : TObjectData, fieldsSet : Set<string>) => {[attrName: string]: any};
-    public unpackAttrs : (data : {[attrName: string]: any}, patch: boolean) => TObjectData;
-    private _update : (resource: Resource, options: {data: TObjectData, context: Context, op: string}) => Promise<TObjectData>;
-    private _create : (resource: Resource, options: {data: TObjectData, context: Context, op: string}) => Promise<TObjectData>;
+    public packAttrs : (object : ObjectData, fieldsSet : Set<string>) => {[attrName: string]: any};
+    public unpackAttrs : (data : {[attrName: string]: any}, patch: boolean) => ObjectData;
+    private _update : (resource: Resource, options: {data: ObjectData, context: Context, op: string}) => Promise<ObjectData>;
+    private _create : (resource: Resource, options: {data: ObjectData, context: Context, op: string}) => Promise<ObjectData>;
     private _remove : (resource: Resource, options: {context: Context}) => Promise<boolean>;
     public getId : (ObjectData) => string;
-    public generateId : (data : TObjectData, context : Context) => string;
+    public generateId : (data : ObjectData, context : Context) => string;
     public passId : boolean | ((context : Context, id : string) => boolean);
-    public perms : { // @todo: make it private
-        create: any,
-        update: any,
-        remove: any,
-        read: any
+    public perms : {
+        create: PermissionRecord,
+        update: PermissionRecord,
+        remove: PermissionRecord,
+        read: PermissionRecord
     };
     private _filter?: {
-        schema?: TSchema
+        schema?: Schema
     };
     private _sort?: {
-        schema?: TSchema
+        schema?: Schema
     };
     private _page? : {
-        schema?: TSchema
+        schema?: Schema
     };
     public rels : {[name: string] : Relationship};
 
@@ -167,7 +169,7 @@ export class Collection {
                     const setter = d.set || ((obj, x) => {
                         obj[name] = x;
                     });
-                    const schema = d.schema || d.joi;
+                    const schema = d.schema;
                     setters[name] = !schema ? setter : (obj, x) => {
                         const validation = schema.validate(x);
                         if (validation.error) {
@@ -335,11 +337,11 @@ export class Collection {
         });
     }
 
-    private _loadFew(ids: string[], context: Context) : Promise<{[id: string]: TObjectData}> {
+    private _loadFew(ids: string[], context: Context) : Promise<{[id: string]: ObjectData}> {
         throw methodNotAllowedError();
     }
 
-    async loadList({filter, page, sort} : TListParams, context : Context) : Promise<{items: Array<TObjectData>, meta?: any}> {
+    async loadList({filter, page, sort} : ListParams, context : Context) : Promise<{items: Array<ObjectData>, meta?: any}> {
         filter = validate(filter, this._filter.schema, 'Filter validation');
         page = validate(page, this._page.schema, 'Page validation');
         sort = validate(sort, this._sort.schema, 'Sort validation');
@@ -388,14 +390,14 @@ export class Collection {
         return loaded;
     }
 
-    _loadList(params: TListParams, context: Context) : Promise<{items: Array<TObjectData>, meta?: any}> {
+    _loadList(params: ListParams, context: Context) : Promise<{items: Array<ObjectData>, meta?: any}> {
         throw methodNotAllowedError();
     }
 
     /**
      * Low level method
      */
-    update(resource: Resource, data: TObjectData) : Promise<TObjectData> {
+    update(resource: Resource, data: ObjectData) : Promise<ObjectData> {
         return this._update(resource, {
             data,
             context: resource.context,
@@ -406,7 +408,7 @@ export class Collection {
     /**
      * Low level method
      */
-    create(resource: Resource, data: TObjectData) : Promise<TObjectData> {
+    create(resource: Resource, data: ObjectData) : Promise<ObjectData> {
         return this._create(resource, {
             data,
             context: resource.context,

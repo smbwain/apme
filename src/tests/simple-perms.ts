@@ -1,13 +1,11 @@
 import 'source-map-support/register';
 
-import {Apme, jsonErrorHandler} from '..';
+import {apme as Apme, jsonErrorHandler, jsonApi} from '..';
 
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
 import * as request from 'request';
 import * as assert from 'assert';
-import {Context} from "../context";
-import {jsonApi} from "../apis/jsonapi";
 
 const TEST_PORT = 23001;
 
@@ -43,7 +41,7 @@ describe('simple perms', () => {
     let server;
 
     before('should start server', done => {
-        const apme = new Apme();
+        const apme = Apme();
         apme.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
@@ -77,7 +75,7 @@ describe('simple perms', () => {
                         return !!(context.req && context.req.user);
                     }
                 },
-                write: resource => {
+                write: ({resource}) => {
                     return !!(resource.context.req && resource.context.req.user && (resource.context.req.user.id == '999' || resource.context.req.user.id == resource.id));
                 }
             }

@@ -3,6 +3,7 @@ import {forbiddenError, notFoundError} from './errors';
 import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
 import {Collection} from "./collection";
 import {Context} from './context';
+import {ObjectData, PermissionRecord, ResourceInterface} from "./types";
 
 /*function filterFields(obj, fields) {
     if(!fields) {
@@ -15,7 +16,7 @@ import {Context} from './context';
     return res;
 }*/
 
-export class Resource /*implements ResourceInterface*/ {
+export class Resource implements ResourceInterface {
     public context : Context;
     public type : string;
     public id : string;
@@ -169,11 +170,12 @@ export class Resource /*implements ResourceInterface*/ {
     async include(includeTree) {
         return await (new ResourcesTypedList(this.context, this.type, [this])).include(includeTree);
     }
-    async checkPermission(operation, data?) {
+    async checkPermission(op : string, data? : ObjectData) {
         if(this.context.privileged) {
             return true;
         }
-        const perm = this.context.apme.collections[this.type].perms[operation];
+
+        const perm : PermissionRecord = this.context.apme.collections[this.type].perms[op];
         if(perm.const != null) {
             return perm.const;
         }
@@ -181,9 +183,9 @@ export class Resource /*implements ResourceInterface*/ {
             return await perm.byContext(this.context);
         }
         if(perm.one) {
-            return await perm.one(this, operation, data);
+            return await perm.one({resource: this, op, data, context: this.context});
         }
-        return await perm.few(new ResourcesTypedList(this.context, this.type, [this]), operation, data);
+        return await perm.few({list: new ResourcesTypedList(this.context, this.type, [this]), op, data, context: this.context});
     }
     async clearCache() {
         await this.context.apme.collections[this.type].removeObjectCache(this.id);

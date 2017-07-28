@@ -1,7 +1,10 @@
-export {Apme} from './apme';
+import {Apme} from './apme';
+import {SimpleMemoryCache} from "./cache";
+import {ResourceInterface} from "./types";
+
 export {jsonErrorHandler} from './errors';
-export {Cache, SimpleMemoryCache, SimpleDebugMemoryCache} from './cache';
-export function group(arr, field = 'id') {
+export * from './cache';
+export function group<T>(arr : T[], field : string | ((object: T) => string) = 'id') : {[name: string] : T} {
     const getter = (typeof field == 'function') ? field : data => data[field];
     const map = {};
     for(const item of arr) {
@@ -9,3 +12,13 @@ export function group(arr, field = 'id') {
     }
     return map;
 }
+
+export function apme() : Apme {
+    return new Apme();
+}
+
+export function simpleMemoryCache(options?: {flushInterval? : number}) : SimpleMemoryCache {
+    return new SimpleMemoryCache(options);
+}
+
+export {jsonApi} from './apis/jsonapi';

@@ -7,6 +7,7 @@ import {validate} from '../validate';
 import * as Joi from 'joi';
 import {Resource} from "../resource";
 import {AbstractResourcesList} from "../resources-lists";
+import {JsonApiInterface} from "../types";
 
 function parseFields(fields) {
     const res = {};
@@ -62,7 +63,7 @@ const schemas : any = {};
     schemas.include = Joi.string();
 }
 
-class JsonApi {
+class JsonApi implements JsonApiInterface {
     private apme : Apme;
     private url : string;
 

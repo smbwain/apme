@@ -1,10 +1,10 @@
 
 import {Resource, ResourcesMap} from './resource';
 import {AbstractResourcesList, ResourceTypedQuery, ResourcesTypedList} from './resources-lists';
-import {ContextOptions, TListParams} from './types';
 import {Apme} from './apme';
+import {ContextInterface, ContextOptions, ListParams} from "./types"
 
-export class Context /*implements ContextInterface*/ {
+export class Context implements ContextInterface {
     public meta : {
         [key: string]: any
     } = {};
@@ -39,7 +39,10 @@ export class Context /*implements ContextInterface*/ {
         };
     }
 
-    resource(type : string, id : string, object? : any) : Resource {
+    resource(type : string, id? : string, object? : any) : Resource {
+        if(!this.apme.collections[type]) {
+            throw new Error(`Unknown collection`);
+        }
         if(!id) {
             return new Resource(this, type, null);
         }
@@ -55,12 +58,15 @@ export class Context /*implements ContextInterface*/ {
     }
 
     resources(type : string, ids : string[]) : ResourcesTypedList {
+        if(!this.apme.collections[type]) {
+            throw new Error(`Unknown collection`);
+        }
         return new ResourcesTypedList(this, type, ids.map(id => this.resource(type, id)));
     }
 
     // resources
 
-    list(type : string, params : TListParams) : ResourceTypedQuery {
+    list(type : string, params : ListParams) : ResourceTypedQuery {
         return new ResourceTypedQuery(this, type, params);
     }
 

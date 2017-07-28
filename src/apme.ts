@@ -1,8 +1,8 @@
 import {Collection} from './collection';
 import {Context} from './context';
-import {ContextOptions, ResourceDefinition} from './types';
+import {ApmeInterface, ResourceDefinition, ContextOptions} from './types';
 
-export class Apme /*implements IApme*/ {
+export class Apme implements ApmeInterface {
     public collections : {[name: string] : Collection} = {};
 
     define(name : string, options: ResourceDefinition) : void {
@@ -13,7 +13,7 @@ export class Apme /*implements IApme*/ {
         return new Context(this, options);
     }
 
-    use(plugin : (apme: Apme) => any) {
+    use(plugin : (apme: ApmeInterface) => any) {
         return plugin(this);
     }
 }

@@ -1,7 +1,6 @@
 import 'source-map-support/register';
 
-import {Apme, jsonErrorHandler} from '..';
-import {jsonApi} from '../apis/jsonapi';
+import {apme as Apme, jsonErrorHandler, jsonApi} from '../..';
 import * as Joi from 'joi';
 
 import * as express from 'express';
@@ -43,14 +42,14 @@ describe('basic crud', () => {
     let server;
 
     before('should start server', done => {
-        const apme = new Apme();
+        const apme = Apme();
         apme.define('users', {
             fields: {
                 name: {
-                    joi: Joi.string()
+                    schema: Joi.string()
                 },
                 lastName: {
-                    joi: Joi.string()
+                    schema: Joi.string()
                 }
             },
             loadList: async () => (users),

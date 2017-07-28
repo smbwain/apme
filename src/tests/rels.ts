@@ -1,12 +1,11 @@
 import 'source-map-support/register';
 
-import {Apme, jsonErrorHandler} from '..';
+import {apme as Apme, jsonErrorHandler, jsonApi} from '../..';
 
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
 import * as request from 'request';
 import * as assert from 'assert';
-import {jsonApi} from "../apis/jsonapi";
 
 const TEST_PORT = 23001;
 
@@ -75,7 +74,7 @@ describe('rels', () => {
     let server;
 
     before(done => {
-        const apme = new Apme();
+        const apme = Apme();
         apme.define('users', {
             loadList: async () => (users),
             loadOne: async id => (users.find(user => user.id == id)),
@@ -97,11 +96,11 @@ describe('rels', () => {
             rels: {
                 owner: {
                     toOne: 'users',
-                    getIdOne: resource => resource.object.ownerId
+                    getIdOne: resource => resource.data.ownerId
                 },
                 authors: {
                     toMany: 'users',
-                    getIdsOne: resource => resource.object.authors || []
+                    getIdsOne: resource => resource.data.authors || []
                 }
             }
         });

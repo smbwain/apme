@@ -3,8 +3,9 @@
   "version": "2.0.0",
   "description": "Jsonapi server middleware for express",
   "main": "dist/index.js",
+  "types": "types.d.ts",
   "scripts": {
-    "build": "gulp build",
+    "build": "tsc",
     "test": "mocha dist/tests"
   },
   "repository": {
@@ -31,9 +32,6 @@
     "@types/node": "8.0.7",
     "body-parser": "1.15.2",
     "express": "4.14.0",
-    "gulp": "3.9.1",
-    "gulp-sourcemaps": "2.1.1",
-    "gulp-typescript": "3.1.7",
     "mocha": "3.4.2",
     "request": "2.75.0",
     "source-map-support": "0.4.3",

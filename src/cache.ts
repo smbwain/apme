@@ -1,11 +1,11 @@
 
-import {TObjectData} from './types';
+import {ObjectData, CacheInterface} from './types';
 
-export abstract class Cache /*implements CacheInterface*/ {
-    abstract get(prefix, key);
-    abstract set(prefix, key, value);
-    abstract remove(prefix, key);
-    async mget(prefix, keys) {
+export abstract class Cache implements CacheInterface {
+    abstract get(prefix : string, key : string) : Promise<ObjectData>;
+    abstract set(prefix : string, key : string, value : ObjectData) : Promise<void>;
+    abstract remove(prefix : string, key : string) : Promise<void>;
+    async mget(prefix : string, keys : string[]) : Promise<{[key : string]: ObjectData}> {
         const few = {};
         for(const key of keys) {
             const cached = await this.get(prefix, key);
@@ -15,34 +15,44 @@ export abstract class Cache /*implements CacheInterface*/ {
         }
         return few;
     }
-    async mset(prefix, few) {
+    async mset(prefix : string, few : {[key : string]: ObjectData}) : Promise<void> {
         for(const key in few) {
             await this.set(prefix, key, few[key]);
         }
     }
-    async mremove(prefix, keys) {
+    async mremove(prefix : string, keys : string[]) : Promise<void> {
         for(const key of keys) {
             await this.remove(prefix, key);
         }
     }
-    async load(prefix, key, options, loader) {
+    async load(
+        prefix : string,
+        key : string,
+        options : {fast?: boolean} | (() => Promise<ObjectData>),
+        loader? : () => Promise<ObjectData>
+    ) : Promise<ObjectData> {
         if(!loader) {
-            loader = options;
+            loader = options as (() => Promise<ObjectData>);
             options = {};
         }
         let cached = await this.get(prefix, key);
         if(cached === undefined) {
             cached = await loader();
             const setPromise = this.set(prefix, key, cached);
-            if(!options.fast) {
+            if(!(options as ({ fast?: boolean; })).fast) {
                 await setPromise;
             }
         }
         return cached;
     }
-    async mload(prefix, keys, options, loader) {
+    async mload(
+        prefix : string,
+        keys : string[],
+        options : {fast?: boolean} | ((keys : string[]) => Promise<ObjectData>),
+        loader? : (keys : string[]) => Promise<ObjectData>
+    ) : Promise<{[key : string]: ObjectData}> {
         if(!loader) {
-            loader = options;
+            loader = options as ((keys : string[]) => Promise<ObjectData>);
             options = {};
         }
         const few = await this.mget(prefix, keys);
@@ -56,7 +66,7 @@ export abstract class Cache /*implements CacheInterface*/ {
                 }
             }
             const setPromise = this.mset(prefix, res);
-            if(!options.fast) {
+            if(!(options as {fast?: boolean}).fast) {
                 await setPromise;
             }
             for(const key in res) {
@@ -79,19 +89,19 @@ export class SimpleMemoryCache extends Cache {
             }, flushInterval);
         }
     }
-    destroy() {
+    destroy(): void {
         if(this._tmr) {
             clearInterval(this._tmr);
             this._tmr = null;
         }
     }
-    set(prefix, key, value) {
+    async set(prefix : string, key : string, value : ObjectData) : Promise<void> {
         this._cache[prefix+key] = value;
     }
-    get(prefix, key) {
+    async get(prefix : string, key : string) : Promise<ObjectData> {
         return this._cache[prefix+key];
     }
-    remove(prefix, key) {
+    async remove(prefix : string, key : string) : Promise<void> {
         delete this._cache[prefix+key];
     }
 }
