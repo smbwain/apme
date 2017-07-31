@@ -1,5 +1,5 @@
 
-import {methodNotAllowedError, badRequestError} from './errors';
+import * as errors from './errors';
 import {MD5} from 'object-hash';
 import {v4 as uuid} from 'uuid';
 import {Relationship} from './relationship';
@@ -198,7 +198,7 @@ export class Collection implements CollectionInterface {
                 if(patch) {
                     for(const fieldName in data) {
                         if(!setters[fieldName]) {
-                            throw badRequestError(`Unwritable field "${fieldName}"`);
+                            throw errors.badRequest(`Unwritable field "${fieldName}"`);
                         }
                         setters[fieldName](obj, data[fieldName]);
                     }
@@ -208,7 +208,7 @@ export class Collection implements CollectionInterface {
                     }
                     for (const fieldName in data) {
                         if(!setters[fieldName]) {
-                            throw badRequestError(`Unwritable field "${fieldName}"`);
+                            throw errors.badRequest(`Unwritable field "${fieldName}"`);
                         }
                     }
                 }
@@ -325,7 +325,7 @@ export class Collection implements CollectionInterface {
     }
 
     private async _loadOne(id: string, context: Context) : Promise<Resource> {
-        throw methodNotAllowedError();
+        throw errors.methodNotAllowed();
     }
 
     loadFew(ids : string[], context : Context) : Promise<{[id: string] : Resource}> {
@@ -338,7 +338,7 @@ export class Collection implements CollectionInterface {
     }
 
     private _loadFew(ids: string[], context: Context) : Promise<{[id: string]: ObjectData}> {
-        throw methodNotAllowedError();
+        throw errors.methodNotAllowed();
     }
 
     async loadList({filter, page, sort} : ListParams, context : Context) : Promise<{items: Array<ObjectData>, meta?: any}> {
@@ -391,7 +391,7 @@ export class Collection implements CollectionInterface {
     }
 
     _loadList(params: ListParams, context: Context) : Promise<{items: Array<ObjectData>, meta?: any}> {
-        throw methodNotAllowedError();
+        throw errors.methodNotAllowed();
     }
 
     /**

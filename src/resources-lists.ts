@@ -1,6 +1,6 @@
 
 import {Resource, ResourcesMap} from './resource';
-import {forbiddenError} from './errors';
+import * as errors from './errors';
 import {ListParams, PermissionRecord, ListInterface, IncludeTree} from "./types";
 import {Context} from './context';
 
@@ -137,7 +137,7 @@ export class ResourcesTypedList extends AbstractResourcesList implements ListInt
         }
 
         if(!await this.checkPermission('read')) {
-            throw forbiddenError();
+            throw errors.forbidden();
         }
 
         await this._loadRels();
@@ -259,7 +259,7 @@ export class ResourceTypedQuery extends ResourcesTypedList implements ListInterf
         this.meta = loaded.meta;
         this.loaded = true;
         if(!await this.checkPermission('read')) {
-            throw forbiddenError();
+            throw errors.forbidden();
         }
 
         await this._loadRels();

@@ -1,5 +1,5 @@
 import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
-import {badRequestError} from './errors';
+import * as errors from './errors';
 import {ObjectData, RelationOptions, RelationshipInterface} from "./types";
 import {Resource} from "./resource";
 import {Collection} from "./collection";
@@ -52,10 +52,10 @@ export class Relationship implements RelationshipInterface {
                 if(options.setIdOne) {
                     this.setData = (data, relValue) => {
                         if(Array.isArray(relValue)) {
-                            throw badRequestError(`Relation "${this.name}" is toOne`);
+                            throw errors.badRequest(`Relation "${this.name}" is toOne`);
                         }
                         if(relValue.type != type) {
-                            throw badRequestError(`Relation "${this.name}" type error`);
+                            throw errors.badRequest(`Relation "${this.name}" type error`);
                         }
                         options.setIdOne(data, relValue ? relValue.id : null);
                     };
@@ -127,10 +127,10 @@ export class Relationship implements RelationshipInterface {
                 if(options.setIdsOne) {
                     this.setData = (data, relValue) => {
                         if(!Array.isArray(relValue)) {
-                            throw badRequestError(`Relation "${this.name}" is toMany`);
+                            throw errors.badRequest(`Relation "${this.name}" is toMany`);
                         }
                         if(relValue.some(resource => resource.type != type)) {
-                            throw badRequestError(`Relation "${this.name}" type error`);
+                            throw errors.badRequest(`Relation "${this.name}" type error`);
                         }
                         options.setIdsOne(data, relValue.map(resource => resource.id));
                     };

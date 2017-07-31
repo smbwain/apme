@@ -12,7 +12,7 @@ export type SyncOrAsync<T> = T | Promise<T>;
 export interface ApmeInterface {
     define(name : string, options: ResourceDefinition) : void;
     context(options: ContextOptions) : ContextInterface;
-    use(plugin : (apme: ApmeInterface) => any): any;
+    use<T>(plugin : (apme: ApmeInterface) => T): T;
     collection(name: string) : CollectionInterface;
 }
 

@@ -1,5 +1,5 @@
 
-import {forbiddenError, notFoundError} from './errors';
+import * as errors from './errors';
 import {ResourcesTypedList, AbstractResourcesList} from './resources-lists';
 import {Collection} from "./collection";
 import {Context} from './context';
@@ -114,11 +114,11 @@ export class Resource implements ResourceInterface.Readable, ResourceInterface.L
             const collection = this.context.apme.collections[this.type];
             const data = (await collection.loadOne(this.id, this.context));
             if(!data && mustExist) {
-                throw notFoundError();
+                throw errors.notFound();
             }
             this._attachObject(data || null);
             if(!await this.checkPermission('read')) {
-                throw forbiddenError();
+                throw errors.forbidden();
             }
         }
         if(!this._rels && this._object) {
@@ -140,7 +140,7 @@ export class Resource implements ResourceInterface.Readable, ResourceInterface.L
     }
     async update(data) {
         if(!await this.checkPermission('update', data)) {
-            throw forbiddenError();
+            throw errors.forbidden();
         }
         const collection = this.context.apme.collections[this.type];
         data = await collection.update(this, data);
@@ -151,7 +151,7 @@ export class Resource implements ResourceInterface.Readable, ResourceInterface.L
     }
     async create(data) {
         if(!await this.checkPermission('create', data)) {
-            throw forbiddenError();
+            throw errors.forbidden();
         }
         const collection = this.context.apme.collections[this.type];
         data = await collection.create(this, data);
@@ -166,7 +166,7 @@ export class Resource implements ResourceInterface.Readable, ResourceInterface.L
     }
     async remove() {
         if(!await this.checkPermission('read') || !await this.checkPermission('remove')) {
-            throw forbiddenError();
+            throw errors.forbidden();
         }
         return await this.context.apme.collections[this.type].remove(this);
     }

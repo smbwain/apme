@@ -5,10 +5,15 @@ import {ApmeInterface, CacheInterface, ObjectData, ResourceInterface} from "./sr
 
 export default function() : ApmeInterface;
 
-export function jsonErrorHandler(options? : {
-    debug?: boolean,
-    errorLog?: (err) => void
-}): (err, req, res, next) => void;
+export namespace errors {
+    export function validation(validationError? : any, text? : string) : Error;
+    export function unauthorized(str? : string) : Error;
+    export function forbidden(str? : string) : Error;
+    export function notFound(str? : string) : Error;
+    export function badRequest(str? : string) : Error;
+    export function methodNotAllowed(str? : string) : Error;
+    export function conflict(str? : string) : Error;
+}
 
 export function simpleMemoryCache(options?: {flushInterval? : number}) : CacheInterface;
 
