@@ -152,18 +152,25 @@ export type RelationOptions = {
 };
 
 export namespace ListInterface {
-    export interface Loadable<T = void> {
+    export interface Empty {
         context: ContextInterface;
         loaded: boolean;
+    }
+
+    export interface LoadableInterface<T = Empty> extends Empty {
         load() : Promise<Readable<T>>;
         // loadIdentifiers() : Promise<ResourceInterface.Identifier[]>;
     }
 
-    export interface Readable<T = void> extends Loadable<T> {
+    export type Loadable<T = Empty> = T & LoadableInterface<T>;
+
+    export interface ReadableInterface<T = Empty> extends LoadableInterface<T> {
         items: ResourceInterface.Readable[];
         splitByType() : {[type : string]: Readable<Typed>};
-        include(includeTree : IncludeTree) : Promise<Readable<void>>;
+        include(includeTree : IncludeTree) : Promise<Readable<LoadableInterface>>;
     }
+
+    export type Readable<T = Empty> = T & ReadableInterface<T>;
 
     export interface Typed {
         type: string;

@@ -4,7 +4,7 @@ import * as errors from './errors';
 import {ListParams, PermissionRecord, ListInterface, IncludeTree} from "./types";
 import {Context} from './context';
 
-export abstract class AbstractResourcesList implements ListInterface.Readable, ListInterface.Loadable {
+export abstract class AbstractResourcesList implements ListInterface.ReadableInterface, ListInterface.LoadableInterface {
     public context: Context;
     public meta : {
         [name: string]: any
