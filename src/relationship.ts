@@ -54,7 +54,7 @@ export class Relationship implements RelationshipInterface {
                         if(Array.isArray(relValue)) {
                             throw errors.badRequest(`Relation "${this.name}" is toOne`);
                         }
-                        if(relValue.type != type) {
+                        if(relValue && relValue.type != type) {
                             throw errors.badRequest(`Relation "${this.name}" type error`);
                         }
                         options.setIdOne(data, relValue ? relValue.id : null);
