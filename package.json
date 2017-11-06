@@ -1,6 +1,6 @@
 {
   "name": "apme",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Jsonapi server middleware for express",
   "main": "dist/index.js",
   "types": "types.d.ts",
